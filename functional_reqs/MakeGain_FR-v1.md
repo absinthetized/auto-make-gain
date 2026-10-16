@@ -139,3 +139,12 @@ No sidechain input. No external routing. One instance, one insert point.
   matching).
 - No installers/packaging in v0 (FR-18).
 - No presets system beyond a saved default state (may be revisited).
+
+## 9. Deferred ideas (backlog, not v1)
+
+- **Noise/silence skipping in the computation** — skip quiet content instead
+  of counting it, so training and Adjust ignore noise floors entirely.
+  Noted for a future version. Implies committing to a fixed, defined
+  noise/silence gate threshold (absolute gate). Deferred in v1 only; the
+  FR text (FR-5a, FR-9) should be revisited when this is designed so the
+  gate definition exists in exactly one place.
