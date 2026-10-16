@@ -1,6 +1,6 @@
 # MakeGain — Functional Requirements (FR)
 
-> Version: v1 — 2026-10-16
+> Version: v1.1 — 2026-10-16 (UX-Q1..Q6 resolved; see §7)
 > Product: chain-wide automatic make-gain / gain compensation plugin.
 > Working name: **MakeGain** · repo: `auto-make-gain`
 >
@@ -36,40 +36,52 @@ No sidechain input. No external routing. One instance, one insert point.
 
 - **FR-1 IDLE** — plugin passes audio through untouched (no gain applied).
   Metering of in/out level may run.
-- **FR-2 READ** — plugin keeps passing audio untouched while measuring the
-  input loudness. Duration: at least a few seconds of program material; the
-  plugin indicates readiness as the measurement stabilizes (progress +
-  "ready" state). Reference is captured when the user confirms (see UX-Q1).
+- **FR-2 READ (training)** — user presses the training button (Melda-style):
+  the plugin keeps passing audio untouched while it measures the input
+  loudness for a fixed training window. Duration is **not a UI setting**: it
+  lives in code as a single variable (default **3.0 s**, adjustable in code
+  without touching the FR contract). When the window elapses, training
+  completes on its own (no second press needed) and captures the reference.
+  The plugin remains un-engaged (no gain applied) until the user presses
+  Adjust (FR-3).
 - **FR-3 ADJUST** — plugin continuously measures the loudness of its (now
-  processed) input with the **same metric and display settings used at
-  Read time**, and applies compensating gain `g = reference − measured`,
-  ramped smoothly per-sample (no zipper noise, automation-safe).
-- **FR-4 Re-read** — from any state, pressing Read starts a new training run
-  (replaces the previous reference).
+  processed) input with the **selected metric** and applies compensating gain
+  `g = reference(selected metric) − measured(selected metric)`, ramped
+  smoothly per-sample (no zipper noise, automation-safe).
+- **FR-4 Re-read** — from any state, pressing the training button starts a
+  new training run (replaces the previous reference at its next completion).
 - **FR-5 Active toggle** — an engage/bypass switch that returns to IDLE and
   back, preserving the last reference (no re-train on re-engage).
+- **FR-5a** If audio is absent (silence) during the training window, the
+  captured reference may be poor — see FR-9 and UX-Q3-style behavior: the
+  plugin still captures, but flags "low-confidence reference" in the UI so
+  the user can re-read. (Behavior of silence inside training is simple:
+  it counts as measured signal; flag, don't block.)
 
 ## 3. Measurement (behavioral requirements)
 
-- **FR-6 Metric options** — user selects the loudness metric *before/while
-  training*:
-  - **LUFS** (perceived loudness, K-weighted short-term scale) — default and
-    primary.
+- **FR-6 Metric options** — compensation metric is a runtime switch:
+  - **LUFS** (perceived loudness, K-weighted short-term scale) — default.
   - **dB RMS** (traditional average-power decibels) — alternative.
-- **FR-7 Reference object** — stored per instance: {metric, captured value,
-  settings used}. Persisted with the host session; survives project
-  reload, plugin parameter changes, and host restarts.
-- **FR-8 Metric/ref consistency** — changing the metric after a reference
-  exists invalidates it: reference shows as **stale** and compensation is
-  not allowed until a new Read completes (no cross-metric comparison).
+- **FR-6a Both metrics captured during every training run.** One training
+  produces *two* reference values (LUFS and dB RMS) computed over the same
+  window. The metric switch simply selects which pair the Adjust comparison
+  uses — switching **never invalidates** the reference (see FR-8).
+- **FR-7 Reference object** — stored per instance: {LUFS reference, dB RMS
+  reference, training window length used}. Persisted with the host session;
+  survives project reload, plugin parameter changes, and host restarts.
+- **FR-8 Metric switching is free** — selecting LUFS vs dB RMS at any time
+  (including mid-Adjust) changes only which stored reference and which live
+  measurement the gain computer compares. No re-read required, no
+  cross-metric math ever occurs. Display of the "other" metric remains
+  active for metering; no stale state exists in v1.
 - **FR-9 Silence handling**:
-  - during Read: silence does not pollute or corrupt the reference
-    (training waits for actual program material);
-  - during Adjust: behavior on sustained silence is a product decision —
-    see UX-Q3 (default proposal: hold last gain).
+  - during Read: silence is treated like any signal (FR-5a flags a
+    low-confidence reference); training does not wait or pause.
+  - during Adjust: sustained silence → hold last applied gain (UX-Q3).
 - **FR-10 Compensation clamp** — applied gain is limited to ± MaxComp dB
-  (user parameter; proposed default **24 dB**). When clamped, the UI flags
-  it ("clamped" indication) so the user doesn't misread it as success.
+  (user parameter; default **24 dB**). When clamped, the UI flags it
+  ("clamped") so the user doesn't misread it as success.
 - **FR-11 No added latency / PDC neutrality** — the plugin must not introduce
   sample delay beyond the host's normal routing (it is a pure gain
   application; nothing sample-based).
@@ -108,16 +120,16 @@ No sidechain input. No external routing. One instance, one insert point.
 - **FR-22 Persistence quality** — loading a session in a different host but
   same platform yields identical reference/settings (no host-specific state).
 
-## 7. UX decisions to settle (discussed in chat, then frozen here)
+## 7. UX decisions (settled — v1)
 
-| # | Question | Proposal |
-|---|---|---|
-| UX-Q1 | How does Read end — user-confirmed, or auto after stability? | Proposal: progress fills as measurement stabilizes; user presses "Adjust" to accept (explicit, predictable). Optional "auto-engage when ready" setting later. |
-| UX-Q2 | What short is "few seconds"? (min window length before Read can be accepted) | Proposal: minimum ~3 s of signal; Read button disabled/indicates "too short" below that. |
-| UX-Q3 | Adjust behavior on sustained silence: hold last gain, or decay to 0 dB? | Proposal: hold last gain (do nothing), with visual "no signal" state. |
-| UX-Q4 | Which parameters are automatable vs UI-only? | Proposal: Active automatable; metric/clamp/ramp not (avoid weird sessions). |
-| UX-Q5 | dB RMS reference: integrate both channels to one value (mono-summed) or per-channel pair? | Proposal: mono-summed single value for v1. |
-| UX-Q6 | Stale-reference terminology & UI treatment after metric change | Proposal: reference row shows "stale — re-read", Adjust disabled. |
+| # | Decision |
+|---|---|
+| UX-Q1 | Training is a press-to-start capture running a fixed code-level window (default 3 s, var in code, not a UI control). Capture completes by itself; engaging Adjust is a separate explicit press. |
+| UX-Q2 | Same as UX-Q1: window is 3 s by default, code-adjustable. |
+| UX-Q3 | On sustained silence during Adjust: **hold last gain** (do nothing), show "no signal". |
+| UX-Q4 | Only the Active toggle is automatable. Metric switch, MaxComp, ramp speed are UI-only (non-automatable parameters). |
+| UX-Q5 | dB RMS is one mono-summed value in v1. Stereo/dual-mono metering is future milestone work. |
+| UX-Q6 | **Both references (LUFS + dB RMS) are captured in every training run.** Switching metrics never invalidates anything; no stale state exists in v1. |
 
 ## 8. Non-goals (v1)
 
