@@ -21,10 +21,10 @@
 
 ## 2. Licensing & third-party deps (SBOM basis)
 
-- **MakeGain licence: AGPLv3** **[assumed]** — direct consequence of JUCE's
-  AGPLv3 option; repo stays public/pure. Every source file carries the SPDX
-  header from M0. If ownership of JUCE commercial licence ever happens, this
-  decision is re-openable (FR-19 note).
+- **MakeGain licence: AGPLv3** — **approved by owner 2026-10-17** (FSF
+  copyleft is the preference). Repo stays public/pure. Every source file
+  carries the SPDX header from M0. If ownership of a JUCE commercial
+  licence ever happens, this decision is re-openable (FR-19 note).
 - **Third-party inventory** (initial SBOM; maintained in this file's table +
   `DEPENDENCIES.md` generated at M0):
 
@@ -79,14 +79,16 @@ Loop every process block, on the analysis path (not the audio path):
 ```
 delta = ref[selected] − measure[selected]          // dB
 targetGain = clamp(−delta, ±MaxComp)
-if outputRMS < silenceAbsGate for > silenceHoldSec (5 s [assumed]):
+if outputRMS < silenceAbsGate for > silenceHoldSec (5 s — approved by
+    owner 2026-10-17):
     targetGain = lastGain                          // UX-Q3: hold
 gain ← slew(targetGain)                            // FR-3 ramp
 ```
 
 - **Slew**: exponential one-pole toward target; time constant from the
-  *ramp speed* parameter (default 300 ms [assumed]); per-sample coefficient
-  interpolation = no zipper; gain change is linear-in-dB during slew.
+  *ramp speed* parameter (default 300 ms — approved by owner 2026-10-17);
+  per-sample coefficient interpolation = no zipper; gain change is
+  linear-in-dB during slew.
 - **Clamp (FR-10)**: ± MaxComp (default **24 dB**). Flag if clamped this
   block.
 - Metric switch (FR-8): pure reads of two already-computed values + two
@@ -111,7 +113,29 @@ gain ← slew(targetGain)                            // FR-3 ramp
 - Reference record serialized as extra APVTS state (binary block). Loading a
   session restores full mode + references.
 
+### 1.1 Framework decision record (why JUCE — alternatives checked)
+
+| Candidate | Formats | macOS arm64 | Linux aarch64 | UI toolkit | Licence | Verdict |
+|---|---|---|---|---|---|---|
+| **JUCE 8** | VST3, CLAP (via clap-juce-extensions), AU (v2/v3), AAX, LV2, standalone | mature | mature | full component system, resizable | AGPLv3 / GPLv3 / commercial | **Selected** |
+| DPF (DISTRHO) | LADSPA, LV2, VST2, VST3, CLAP, JACK standalone | buildable | excellent (its home turf) | modest, smaller widget set | LGPL | Rejected: **no AU target** → fails GarageBand exercise (FR-16) |
+| iPlug2 | VST2/3, AU, AUv3, AAX, CLAP, WebAssembly | works | exists, less battle-tested | decent | permissive (WDL/IPL-style) | Strong runner-up; rejected for this project: smaller community proof on Linux arm64 plugin hosting, and permissive licence buys us nothing since owner *prefers* copyleft |
+| Raw CLAP SDK only (+ hand UI) | CLAP only | yes | yes | you write it | MIT | Rejected: AU + VST3两手 reinvention for a solo project |
+| LV2-first | LV2 only | n/a (mac hosts don't speak it) | yes | n/a | — | Rejected: fails macOS |
+
+Decision axes (from the FRs): AU must exist (exercise tier, FR-16) → only
+JUCE and iPlug2 remain → owner prefers FSF-copyleft and JUCE's AGPLv3 route
+matches that → JUCE. The one JUCE cost (copyleft propagation) is a feature
+per owner's stated preference.
+
+**C++ standard note (veto-item 1 resolved):** JUCE 8's official minimum is
+C++17. C++20 is a compatible superset we compile with; nothing in JUCE
+blocks it. Rule: features we use must stay within "compiles under both
+C++17 and C++20"; any C++20-only construct needs a code comment. Confirmed
+not to depend on JUCE internals that differ between standards.
+
 ## 4. Plugin architecture
+
 
 ```
 src/
@@ -163,6 +187,12 @@ src/
 
 ## 7. Testing strategy (FR-20, FR-21 quality gates)
 
+- **Sanitizers (path-A memory-safety strategy, owner-approved 2026-10-17):**
+  all `tests/` targets get a `-sanitize` CMake variant compiling with
+  `-fsanitize=address,undefined` (GCC on Asahi, clang on macOS), wired into
+  CI so the whole Catch2 suite runs under both ASan (incl. LeakSanitizer)
+  and UBSan on each push. Plugin builds stay sanitizer-free; a documented
+  "sanitized plugin" preset exists for manual host repro sessions.
 - `tests/dsp_*`: Catch2 host-side tests (no JUCE needed — dsp/ is JUCE-free):
   K-filter response vs published BS.1770 curves; loudness meter golden-signal
   (canned WAV → expected LUFS/RMS); clamp/slew/hold behavior; metric-switch
@@ -180,11 +210,43 @@ src/
 | JUCE AGPLv3 expectations | GPL-compliance page in this repo before v0 release tag |
 | Realtime bugs in Linux-only paths | unit tests cover all DSP; host-matrix exercise covers plugin-level paths |
 
-## 9. Open (veto-list) — decisions [assumed] in this doc
+## 9. Decision log (veto items status)
 
-1. C++20 vs C++17 (§1) — any objection?
-2. AGPLv3 as the project licence (§2).
-3. Silence-hold window 5 s (§3.3) and ramp speed default 300 ms.
-4. Mono-sum analysis for v1 (§4), stereo-reference in later milestone (UX-Q5).
-5. Repo internal `dsp/` purity rule (no JUCE includes) — it buys cheap unit
-   tests; costs a thin adapter layer in plugin/.
+1. **C++ standard** — resolved: compile as C++20 with C++17-compatible
+   features only (JUCE 8 baseline is C++17; see §1.1).
+2. **AGPLv3** — **approved by owner** (FSF-copyleft preference).
+3. **Rephrased:** two tunable numeric defaults live in the gain computer:
+   ① *silence-hold timer* = how long the output must stay silent before the
+   plugin stops chasing and simply freezes its last applied gain → default
+   **5 s**; ② *ramp speed* = how fast the applied gain glides toward a new
+   target (one-pole time constant) → default **300 ms** (fast enough to be
+   invisible, slow enough to never click). Both will be code constants with
+   UI exposure later. **Approved by owner 2026-10-17.**
+4. **Mono-sum analysis for v1** — **approved by owner** (stereo dual-ref is
+   a future milestone).
+5. **Purity rule, restated by owner:** the *actual* requirement is platform
+   isolation — anything leaking arch/OS details (SIMD intrinsics, endian,
+   thread primitives, file system) must be fenced behind thin abstraction
+   layers. The concrete form (pure-dsp vs JUCE-free, language features,
+   arch guards) gets finalized when §1's language decision is closed.
+
+## 10. Session backlog (this project's live backlog)
+
+- **Release & branching model** — not yet discussed: branching strategy,
+  tags (semver?), release cadence, `main` protections, version string
+  surfaced in the plugin UI/about.
+- Installers / packaging (bumped from v0 scope, FR-18).
+- Noise/silence gate *skipping* in computation (deferred idea, FR doc §9).
+- CI enablement (deferred from v0 by FR-18; presets first).
+
+### Decision log — language vote, closed 2026-10-17
+- **Path A confirmed by owner**: pure C++20 + JUCE for v1.
+- Rejected: **Path B** (JUCE C++ shell + Rust DSP core via `cxx` — two
+  toolchains, FFI surface disproportionate to our small DSP scope), and
+  **Path C** (full-Rust `nih-plug` — memory-safe, but drops the AU target
+  and rewrites the framework decision record for little real gain given
+  sanitizer coverage).
+- Sanitizers (ASan + UBSan on every CI test run) are the official,
+  owner-adopted memory-safety strategy (§7). Any future DSP growth that
+  reopens the Rust question will cite this entry as recorded precedent.
+
