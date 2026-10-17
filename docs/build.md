@@ -7,11 +7,11 @@ DAW. Nothing here assumes pre-installed tools.
 
 | Check | macOS 27/arm64 | Fedora Asahi aarch64 |
 |---|---|---|
-| bootstrap | ✅ passed | ✅ ran (deps list was incomplete → fix landed) |
-| cmake configure (juceaide, deps fetch) | ✅ | ❌→ 🔁 pending re-run with updated deps list |
-| build all formats | ✅ VST3/CLAP/AU | 🔁 pending |
-| ctest (incl. sanitizers) | ✅ | 🔁 pending |
-| load in DAW | ✅ Reaper (flawless) | ❌ NOT validated — **deliberately out of this PR's scope** (owner ruling: cross-compile & cross-exec validation postponed to the `m0-linux-inner-loop` branch) |
+| bootstrap | ✅ passed | ✅ ran (deps list was incomplete → fix landed, merged in PR #1) |
+| cmake configure (juceaide, deps fetch) | ✅ | ✅ **in container** (`fedora:44`, gcc 16.2.1) — pins resolved (JUCE 8.0.15 / clap-ext `7adee3a` / Catch2 v3.16.1), juceaide built+tested; **native Asahi re-run ⏳** |
+| build all formats | ✅ VST3/CLAP/AU | ✅ **in container** — VST3+CLAP for aarch64-linux, both lanes; **native Asahi rebuild ⏳** |
+| ctest (incl. sanitizers) | ✅ | ✅ **in container** — both lanes pass (sanitizer: ASan/UBSan/LSan); **native Asahi run ⏳** |
+| load in DAW | ✅ Reaper (flawless) | ❌ NOT validated — **deliberately Tier-2 scope**; artifacts transferable via pen per §8.1 (compatibility guard in 8.1.1) |
 
 > Therefore: anything tagged on this PR's merge describes **macOS-side
 > validation only**. Linux compile/run validation is the explicit job of
@@ -189,3 +189,35 @@ docker run --rm -v "$PWD":/work -w /work makegain-fedora-dev \
 Sanitizer lane runs the same way with the `MAKEGAIN_SANITIZERS` preset
 flag (§3). What the container can never answer: *does the plugin load and
 behave inside a real DAW* — that stays Tier 2, by design.
+
+### 8.1 Artifact transfer lane (container → pen → bare metal)
+
+The plugin artifacts from the container lane are directly runable on the
+Fedora Asahi box, because the Remix's *userland* is upstream Fedora 44 —
+the same release the container is pinned to (§8). So instead of
+re-provisioning + rebuilding during a rare Tier-2 session, carry the
+binaries over:
+
+```sh
+cp -R build/linux-arm64/MakeGain_artefacts/Release/VST3 \
+      build/linux-arm64/MakeGain_artefacts/Release/CLAP <pen>
+# on Asahi: hosts auto-scan ~/.vst3 and ~/.clap
+```
+
+Caveats that keep this honest (ruling 2026-10-18):
+
+1. **One-time compatibility guard:** compare `gcc --version` container vs.
+   Asahi before trusting a transfer. If the Asahi install is an *older*
+   Fedora release, a newer-built binary fails loudly at load
+   (`version 'GLIBC_x' not found`) — fix by re-pinning the image to that
+   release tag, not by silent fudging.
+2. **Diagnosis purity:** a misbehaving plugin on bare metal is first
+   suspected to be the cross-built binary. Discipline: rebuild natively on
+   Asahi *before* debugging code. The native rebuild is minutes; the
+   bootstrap story is already correct.
+3. **Staleness naming:** point-in-time artifacts must carry their truth —
+   name the copied folder `makegain-linux-arts-<short-sha>` so a later
+   ambiguity ("which build is on this pen?") is answerable in one glance.
+4. **Scope:** owner-to-owner transfer between his own machines only. The
+   repo's distribution promise stays FR-18's *clone and build* — binaries
+   never leave the owner's ecosystem as project deliverables.
