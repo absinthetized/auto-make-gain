@@ -1,0 +1,123 @@
+# Build guide
+
+Everything needed to go from a fresh machine to a working MakeGain in your
+DAW. Nothing here assumes pre-installed tools.
+
+Last verified: 2026-10-17 (macOS 27 / arm64, Reaper + all 3 formats;
+Fedora Asahi entries verified at C1 bootstrap — cold-reboot checkpoints
+pending, marked ⏳ where relevant).
+
+---
+
+## 1. Clone + bootstrap (the only manual entrypoint)
+
+```sh
+git clone <your-fork-url> auto-make-gain
+cd auto-make-gain
+./scripts/bootstrap.sh            # dry run: checks and *prints* what's missing
+./scripts/bootstrap.sh --yes      # let it fix things
+```
+
+Platform behavior:
+
+| OS | Toolchain source | Notes |
+|---|---|---|
+| macOS | Xcode CLT (auto-triggers), cmake/ninja downloaded to `~/.local/bin` if absent | **Homebrew is NOT required.** If you *do* have brew and cmake, existing installs are used as-is (verified on cmake 4.4.4) |
+| Fedora / Asahi (dnf) | `gcc-c++ cmake ninja-build alsa-lib-devel git` | ⏳ owner cold-reboot checkpoint pending |
+| Debian/Ubuntu (apt) | `git g++ cmake ninja-build libasound2-dev` | best-effort per TS §6 |
+| Arch (pacman) | `git gcc cmake ninja alsa-lib` | best-effort |
+
+If Homebrew is detected but cmake/ninja are missing, the script points you
+at the `brew install cmake ninja` command rather than silently installing.
+
+## 2. Configure + build
+
+```sh
+cmake --preset macos          # or linux-arm64 / linux-x64
+cmake --build build/<preset>
+```
+
+Artifact locations (Release default):
+
+| Format | Artefact | Auto-installed to |
+|---|---|---|
+| VST3 | `build/<preset>/MakeGain_artefacts/Release/VST3/MakeGain.vst3` | `~/Library/Audio/Plug-Ins/VST3/` (macOS) |
+| CLAP | `.../Release/CLAP/MakeGain.clap` | `~/Library/Audio/Plug-Ins/CLAP/` (macOS) |
+| AU | `.../Release/AU/MakeGain.component` | `~/Library/Audio/Plug-Ins/Components/` (macOS) |
+
+(`COPY_PLUGIN_AFTER_BUILD` is ON in-tree at M0 — the build steps copy into
+your user's plug-in folders automatically on macOS.)
+
+First configure downloads the pinned dependencies (JUCE 8.0.15,
+clap-juce-extensions, Catch2 v3.16.1 — pins live in
+`cmake/deps-pins.cmake`).
+
+## 3. Tests
+
+```sh
+./scripts/check-all.sh        # default + ASan/UBSan lane, ctest both
+```
+
+Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
+plugin artifacts are always sanitizer-free.
+
+## 4. Quick host verification
+
+- **Reaper (macOS)**: insert `MakeGain` (VST3/CLAP/AU each resolvable in the
+  plugin browser; first-scan caches may require a manual rescan — see §6).
+- **Ardour (Asahi)**: same, VST3/CLAP disclosed by the host.
+- The M0 stub must pass audio unchanged and show the "M0 stub — passthrough"
+  editor window.
+
+## 5. Loading on macOS 27 — Gatekeeper and signing
+
+M0 artifacts are **ad-hoc signed** by default. On first load, Gatekeeper may
+warn on downloaded (quarantined) binaries — locally built artifacts carry no
+quarantine flag, so normally nothing happens. If you got the artifact from
+someone else's release, remove quarantine manually:
+
+```sh
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/MakeGain.vst3
+```
+
+Release packaging with proper signing/notarization is a post-M0 milestone
+(FR-18).
+
+## 6. Troubleshooting (real friction encountered in this repo's history)
+
+1. **"first configure takes forever"** — JUCE is ~ a large shallow clone +
+   juceaide build. Documented expectation: >15 min on slow links (it was
+   6 min on the reference Mac). Nothing is wrong; on re-configure it is a
+   no-op.
+2. **Metal deprecation warnings on macOS 27** — Apple's own SDK matrices vs
+   JUCE 8.0.15 emit `MTLResourceStorageModeManaged is deprecated` warnings.
+   Harmless and cosmetic at M0; zip them when filing build issues with us.
+3. **`-I` is not recursive** — cross-directory C++ includes must spell the
+   sub-path (`#include "ui/MakeGainEditor.h"`), never a bare basename, unless
+   the file sits at the include-root (`src/`). This bit the very first
+   plugin build here — now the convention everywhere.
+4. **JUCE abstract-class error names the first unimplemented pure virtual**
+   (`getNumPrograms()` etc.): the AudioProcessor needs a full interface
+   stub even for a no-parameter plugin. Done once in C3; if you subclass
+   again later, copy the stub block.
+5. **clap-juce-extensions: the link target is `clap_juce_extensions`** — no
+   `clap-juce-extensions::clap-juce-extensions` ALIAS exists; linking the
+   alias name as documented in older forums fails at configure. Also: do
+   **not** add `CLAP` to juce_add_plugin FORMATS — the extension lays the
+   format over the base target itself.
+6. **Exact-equality on floats in tests** — the reference toolchain produced
+   a value *equal* to the float asserted "not-to-equal": tolerance-based
+   CHECKs only; framework-level mocks arrive with real DSP tests.
+7. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
+   bootstrap is idempotent; re-run to verify.
+
+## 7. Dependency pins (what fetched at configure)
+
+| Pin | Value | Why this pin |
+|---|---|---|
+| JUCE | `8.0.15` | latest 8.0.x; JUCE 9 (9.0.4) deliberately deferred to its own milestone (decision: m0-plan) |
+| clap-juce-extensions | commit `7adee3a` | newest main HEAD compatible with JUCE 8 |
+| Catch2 | `v3.16.1` | latest release at pin time |
+
+Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are
+deliberate, not incidental (AGENTS.md policy).
