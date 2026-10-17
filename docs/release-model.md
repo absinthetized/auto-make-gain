@@ -26,7 +26,7 @@
 
 | Milestone | Tag | Content |
 |---|---|---|
-| M0 | `v0.1.0` | walking skeleton (this milestone; tag **after** Asahi verification, post-merge) |
+| M0 | `v0.1.0` | walking skeleton — **macOS-validated scope** (owner re-scope 2026-10-18: Linux compile/exec validation moved to the `m0-linux-inner-loop` branch + native Asahi session; release notes must state the boundary honestly) |
 | M1 | `v0.2.0` | MVP compensation |
 | M2 | `v0.3.0` | robust analysis + UI |
 | M3 | `v1.0.0-rcN` | rc series, workflow/stereo |

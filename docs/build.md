@@ -3,9 +3,19 @@
 Everything needed to go from a fresh machine to a working MakeGain in your
 DAW. Nothing here assumes pre-installed tools.
 
-Last verified: 2026-10-17 (macOS 27 / arm64, Reaper + all 3 formats;
-Fedora Asahi entries verified at C1 bootstrap — cold-reboot checkpoints
-pending, marked ⏳ where relevant).
+**Validation status (2026-10-18, end of the M0 PR):**
+
+| Check | macOS 27/arm64 | Fedora Asahi aarch64 |
+|---|---|---|
+| bootstrap | ✅ passed | ✅ ran (deps list was incomplete → fix landed) |
+| cmake configure (juceaide, deps fetch) | ✅ | ❌→ 🔁 pending re-run with updated deps list |
+| build all formats | ✅ VST3/CLAP/AU | 🔁 pending |
+| ctest (incl. sanitizers) | ✅ | 🔁 pending |
+| load in DAW | ✅ Reaper (flawless) | ❌ NOT validated — **deliberately out of this PR's scope** (owner ruling: cross-compile & cross-exec validation postponed to the `m0-linux-inner-loop` branch) |
+
+> Therefore: anything tagged on this PR's merge describes **macOS-side
+> validation only**. Linux compile/run validation is the explicit job of
+> the next branch (Docker inner loop) plus a final native Asahi session.
 
 ---
 
@@ -63,9 +73,11 @@ plugin artifacts are always sanitizer-free.
 
 ## 4. Quick host verification
 
-- **Reaper (macOS)**: insert `MakeGain` (VST3/CLAP/AU each resolvable in the
-  plugin browser; first-scan caches may require a manual rescan — see §6).
-- **Ardour (Asahi)**: same, VST3/CLAP disclosed by the host.
+- **Reaper (macOS)** — ✅ verified at C4 checkpoint (all three formats,
+  transparent passthrough). Re-check after substantial processor changes.
+- **Ardour (Asahi)** 🔁 + **Reaper (Asahi)** 🔁 — pending, *not part of
+  the M0 PR scope*; validation lane = `m0-linux-inner-loop` branch (Docker
+  build/test) followed by a native Asahi session.
 - The M0 stub must pass audio unchanged and show the "M0 stub — passthrough"
   editor window.
 
@@ -121,11 +133,10 @@ Release packaging with proper signing/notarization is a post-M0 milestone
    <https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md> —
    the doc we should have consulted first; consult it for every new
    platform-dependent surprise before improvising package lists.
-9. **A `.txt` floor of raw logs/fixes at the repo root** (e.g.
-   `cmake-error-linux.txt`, `cmakre-possible-fix.txt`) is an *input* to
-   this guide, not a destination: content gets absorbed into this
-   section, then the txt files are removed from the tree by their author
-   once their content is captured here.
+9. **A `.txt` floor of raw logs/fixes at the repo root** — absorbed into
+   this guide and removed from the tree (owner-ordered 2026-10-18);
+   future incidents follow the same path: incident file → absorb here →
+   delete.
 
 ## 7. Dependency pins (what fetched at configure)
 
