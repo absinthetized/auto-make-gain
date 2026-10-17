@@ -7,8 +7,18 @@
 ## Goal (M0 exit, from FR-18/TS §6)
 
 A `git clone` of this repo, after following `docs/build.md` *and only that*,
-produces a building `MakeGain` in all three formats on macOS arm64 and
-(VST3/CLAP) on Fedora Asahi aarch64, loadable in Reaper. No DSP yet.
+produces a building `MakeGain` in all three formats on macOS arm64 —
+loadable in Reaper — and, on Fedora Asahi aarch64, completes bootstrap +
+dependency-correct configure (build/test/host-load steps explicitly moved
+out of M0 scope by owner ruling 2026-10-18; see "Scope note" below).
+No DSP yet.
+
+> **Scope note (owner, 2026-10-18):** cross-compilation and cross-execution
+> validation (Linux build → DAW execution loop) is **not** an M0 deliverable
+> and does not come with this PR's merge. It becomes the follow-up branch's
+> mission (`m0-linux-inner-loop`: Docker-based build/test loop on the mac,
+> then a native Asahi host session). Tag/release notes are to state
+> macOS-validation-only until that branch lands.
 
 ## Dependency / toolchain story ("download stuff or tell what to download")
 
@@ -43,7 +53,7 @@ Pins (record, to be set precisely at commit 2):
 | C4 | `plugin: CLAP + AU format targets` | clap-juce-extensions target, AU target (mac only) | ✅ **owner PASSED 2026-10-17**: all three formats load in Reaper (flawless) |
 | C5 | `tests: Catch2 wiring + sanitizer presets` | `tests/dsp/*` (one placeholder test that the empty framework passes), `scripts/check-all.sh` (builds all presets + runs ctest; the local stand-in for CI) | ✓ mac: ALL GREEN (default + ASan/UBSan lane) · Fedora pending cold-reboot checkpoint |
 | C6 | `docs: developer build guide (macOS / Fedora Asahi)` | `docs/build.md`: exact OS-by-OS commands, first-run JUCE download notes, ad-hoc mac code-sign/Gatekeeper notes, "load in Reaper/Ardour" quick test, troubleshooting section (doc-only skeleton at first, grown from C1–C5 friction) | ✅ fresh `git clone` in a new dir → follow doc → Reaper accepts the plugin, with zero knowledge beyond the doc |
-| C7 | `milestone: tag m0` | release notes blurb in `docs/build.md` (or CHANGELOG head) | ✅ owner approves tag |
+| C7 | `milestone: v0.1.0` (renamed 2026-10-17, see release-model.md) | CHANGELOG.md execution + release notes; **re-scoped per owner 2026-10-18**: tag gate moved from "Asahi host verification" to "owner's disposition post-merge (macOS-validated release notes mandatory); Linux validation = next branch (m0-linux-inner-loop) + native Asahi session" | ✅ owner approves the tag itself |
 
 ## Explicit non-goals of M0
 

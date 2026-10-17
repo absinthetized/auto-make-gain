@@ -16,7 +16,7 @@
 | Build system | **CMake ≥ 3.24 + Ninja** | Presets per platform (§6). |
 | C++ formatter | clang-format **[assumed]** | Config committed at M0; astyle/indent not used. |
 | Plugin-UI toolkit | JUCE component system (no OpenGL first) | De-risk Asahi/Mesa GPU quirks; software-drawn editor v1. |
-| Linux sound APIs | none directly used | Plugin runs in host process; host talks to PipeWire/CoreAudio, not us. JUCE's unconditional ALSA dep applies to standalone targets only — we build none of those; headers still needed at config time on Linux. |
+| Linux sound APIs | none directly used | Plugin runs in host process; host talks to PipeWire/CoreAudio, not us. JUCE's unconditional ALSA dep applies to standalone targets only — we build none of those; headers still needed at config time on Linux. **CORRECTED 2026-10-18 (Fedora incident):** Linux ALSO needs FreeType + fontconfig + the X11 dev-family at *configure time* not just ALSA — JUCE's configure builds the `juceaide` helper from `juce_graphics`/`juce_gui_basics`, which probe for those headers. Canonical map: JUCE's official `docs/Linux Dependencies.md`, scoped by our flags (`JUCE_WEB_BROWSER=0`, `JUCE_USE_CURL=0`, `JUCE_JACK=0`, `JUCE_PLUGINHOST_LADSPA=0` in `CMakeLists.txt`). Docker-on-mac is viable for the compile/test inner loop (juceaide headless), See build.md §6.8. |
 | Compilers | macOS: Xcode clang (fixed by the platform); Linux: **gcc primary** (Fedora Asahi default), clang as CI-diversity job later | Rationale: distro-native toolchain for the FR-18 "clone+build" model; JUCE's Linux known-good path is gcc; clang adds value as a *second* opinion in CI (different warnings) and unlocks libFuzzer (`-fsanitize=fuzzer` is clang-only) once CI exists. |
 
 ## 2. Licensing & third-party deps (SBOM basis)
@@ -241,6 +241,16 @@ src/
 - Installers / packaging (bumped from v0 scope, FR-18).
 - Noise/silence gate *skipping* in computation (deferred idea, FR doc §9).
 - CI enablement (deferred from v0 by FR-18; presets first).
+
+## 11. Resolved backlog items
+
+- **Release & branching model** — resolved 2026-10-17; ratified text in
+  [../docs/release-model.md](../docs/release-model.md) (introduced by the
+  first model-exercise PR). Key rulings: work-unit = branch = PR
+  (milestone = largest PR); semver tags only — `v0.1.0` = M0 post-Asahi,
+  `v1.0.0` triggers on completing the full frozen FR contract; no GitHub
+  Releases before v1.0.0; CHANGELOG.md born at `v0.1.0`; `main` protected
+  with PRs required, owner-exempt force-push; agents never push or merge.
 
 ### Decision log — language vote, closed 2026-10-17
 - **Path A confirmed by owner**: pure C++20 + JUCE for v1.

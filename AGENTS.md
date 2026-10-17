@@ -18,7 +18,36 @@ Binding for any AI/agent working in this repository:
      of the implementation plan, and the owner agrees on it *before* coding;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
+   - **Reference metrics** (owner, 2026-10-18) — warnings, not strict rules;
+     exceeding either needs explicit justification in the PR description:
+     - one PR (and its branch) stays **within 10 commits**;
+     - one PR touches **≤ 5–7 source files** — source = anything written
+       in a programming language *including shell/build scripts*; docs
+       (md, txt) do not count;
+     these metrics presume the commit size/atomicity above unchanged (they
+     are the base unit; the PR sizing builds on top of it).
 5. When resuming a session, first read `README.md`, then
    `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
    `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
    backlog (§10). FRs are frozen: changes go through the owner, not silently.
+5. **Release & branching model (owner, 2026-10-17):** from the commit that
+   introduces `docs/release-model.md` onward, agents never work on `main`
+   directly — a unit of work lands on a branch, the owner pushes the
+   branch, opens and merges the PR. Agents never push or merge (rule 2
+   above stays absolute). Details: `docs/release-model.md`.
+6. **Comment standard (owner, 2026-10-17):** code must carry enough
+   comments for a reader with **limited framework knowledge** (decent C++
+   but *not* JUCE) to follow the process. Concretely, in addition to
+   "why" comments:
+   - every non-obvious framework call indirection gets a short
+     "what this means in framework terms" note at the call site;
+   - entry-point chain (no `main()` in plugins!) is documented in-place
+     *and* in `docs/code-tour.md`;
+   - build-side magic (juce_add_plugin metadata, format targets) is
+     annotated in `CMakeLists.txt`;
+   - lifecycle contracts (which thread, what a callback may not do) are
+     stated where the override appears — not assumed known;
+   - no comment narrating trivia; no comment that will rot with the next
+     refactor without maintenance.
+   - `docs/code-tour.md` is kept current whenever the file map or the
+     entry-point chain changes.
