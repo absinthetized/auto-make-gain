@@ -51,7 +51,7 @@ juce_add_plugin(MakeGain
   BUNDLE_ID                 "org.auto-make-gain.makegain"
   PLUGIN_MANUFACTURER_CODE  Amkg
   PLUGIN_CODE               Mkn1
-  FORMATS                   VST3
+  FORMATS                   VST3 AU
   IS_SYNTH                  FALSE
   NEEDS_MIDI_INPUT          FALSE
   NEEDS_MIDI_OUTPUT         FALSE
@@ -74,7 +74,16 @@ target_compile_definitions(MakeGain PUBLIC
 
 target_link_libraries(MakeGain PRIVATE
   juce::juce_audio_utils
-  juce::juce_audio_processors)
+  juce::juce_audio_processors
+  # CLAP wrapper layer (free-audio/clap-juce-extensions). NOTE: the target
+  # is plain-named (no :: alias) — the repo ships no ALIAS for it.
+  clap_juce_extensions)
+
+# CLAP generation (free-audio/clap-juce-extensions): do NOT put "CLAP" in
+# FORMATS — the extension layers it onto this target at configure/build.
+clap_juce_extensions_plugin(TARGET MakeGain
+  CLAP_ID      "org.auto-make-gain.makegain"
+  CLAP_FEATURES audio-effect)
 
 # Disclaimer: JUCE 8 (AGPLv3 route) propagates to this program — AGPLv3,
 # see LICENSE and tech_specs §2.
