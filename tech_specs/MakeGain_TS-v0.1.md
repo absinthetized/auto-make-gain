@@ -16,7 +16,7 @@
 | Build system | **CMake ≥ 3.24 + Ninja** | Presets per platform (§6). |
 | C++ formatter | clang-format **[assumed]** | Config committed at M0; astyle/indent not used. |
 | Plugin-UI toolkit | JUCE component system (no OpenGL first) | De-risk Asahi/Mesa GPU quirks; software-drawn editor v1. |
-| Linux sound APIs | none directly used | Plugin runs in host process; host talks to PipeWire/CoreAudio, not us. JUCE's unconditional ALSA dep applies to standalone targets only — we build none of those; headers still needed at config time on Linux. |
+| Linux sound APIs | none directly used | Plugin runs in host process; host talks to PipeWire/CoreAudio, not us. JUCE's unconditional ALSA dep applies to standalone targets only — we build none of those; headers still needed at config time on Linux. **CORRECTED 2026-10-18 (Fedora incident):** Linux ALSO needs FreeType + fontconfig + the X11 dev-family at *configure time* not just ALSA — JUCE's configure builds the `juceaide` helper from `juce_graphics`/`juce_gui_basics`, which probe for those headers. Canonical map: JUCE's official `docs/Linux Dependencies.md`, scoped by our flags (`JUCE_WEB_BROWSER=0`, `JUCE_USE_CURL=0`, `JUCE_JACK=0`, `JUCE_PLUGINHOST_LADSPA=0` in `CMakeLists.txt`). Docker-on-mac is viable for the compile/test inner loop (juceaide headless), See build.md §6.8. |
 | Compilers | macOS: Xcode clang (fixed by the platform); Linux: **gcc primary** (Fedora Asahi default), clang as CI-diversity job later | Rationale: distro-native toolchain for the FR-18 "clone+build" model; JUCE's Linux known-good path is gcc; clang adds value as a *second* opinion in CI (different warnings) and unlocks libFuzzer (`-fsanitize=fuzzer` is clang-only) once CI exists. |
 
 ## 2. Licensing & third-party deps (SBOM basis)

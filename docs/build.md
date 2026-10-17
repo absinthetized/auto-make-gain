@@ -23,9 +23,9 @@ Platform behavior:
 | OS | Toolchain source | Notes |
 |---|---|---|
 | macOS | Xcode CLT (auto-triggers), cmake/ninja downloaded to `~/.local/bin` if absent | **Homebrew is NOT required.** If you *do* have brew and cmake, existing installs are used as-is (verified on cmake 4.4.4) |
-| Fedora / Asahi (dnf) | `gcc-c++ cmake ninja-build alsa-lib-devel git` | ⏳ owner cold-reboot checkpoint pending |
-| Debian/Ubuntu (apt) | `git g++ cmake ninja-build libasound2-dev` | best-effort per TS §6 |
-| Arch (pacman) | `git gcc cmake ninja alsa-lib` | best-effort |
+| Fedora / Asahi (dnf) | `gcc-c++ cmake ninja-build alsa-lib-devel freetype-devel fontconfig-devel mesa-libGL-devel libX*n-devel family gtk3-devel` | ⏳ retry after 2026-10-18 lesson (see §6.8); official JUCE dep list linked below |
+| Debian/Ubuntu (apt) | `g++ cmake ninja-build libasound2-dev libfreetype-dev libfontconfig1-dev libX11-dev libXcomposite-dev libXcursor-dev libXext-dev libXinerama-dev libXrandr-dev libXrender-dev libglu1-mesa-dev mesa-common-dev` | best-effort per TS §6, official doc scope applies |
+| Arch (pacman) | `git gcc cmake ninja alsa-lib freetype2 fontconfig libgl libx11 libxcomposite libxcursor libxext libxinerama libxrandr libxrender` | best-effort |
 
 If Homebrew is detected but cmake/ninja are missing, the script points you
 at the `brew install cmake ninja` command rather than silently installing.
@@ -110,6 +110,22 @@ Release packaging with proper signing/notarization is a post-M0 milestone
    CHECKs only; framework-level mocks arrive with real DSP tests.
 7. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
    bootstrap is idempotent; re-run to verify.
+8. **"jmessage: ft2build.h / X11/Xlib.h not found while building juceaide"**
+   (hit on Fedora 2026-10-18): JUCE's configure-time helper `juceaide` is
+   itself built as a headless JUCE app, so even plugin-only targets need
+   the **FreeType + X11 dev headers** Linux launch expects — pkg-config
+   probes for freetype2/fontconfig/gl/curl/webkit/gtk are normal
+   *warnings* and non-fatal once the flags in CMakeLists disable the
+   correlative modules (`JUCE_WEB_BROWSER=0`, `JUCE_USE_CURL=0`,
+   `JUCE_JACK=0`, `JUCE_PLUGINHOST_LADSPA=0`). Canonical reference:
+   <https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md> —
+   the doc we should have consulted first; consult it for every new
+   platform-dependent surprise before improvising package lists.
+9. **A `.txt` floor of raw logs/fixes at the repo root** (e.g.
+   `cmake-error-linux.txt`, `cmakre-possible-fix.txt`) is an *input* to
+   this guide, not a destination: content gets absorbed into this
+   section, then the txt files are removed from the tree by their author
+   once their content is captured here.
 
 ## 7. Dependency pins (what fetched at configure)
 

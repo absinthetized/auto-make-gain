@@ -70,7 +70,15 @@ target_include_directories(MakeGain PRIVATE
 target_compile_definitions(MakeGain PUBLIC
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
-  JUCE_VST3_CAN_REPLACE_VST2=0)
+  JUCE_VST3_CAN_REPLACE_VST2=0
+  # Linux build-dependency reduction (TS §3.6/§6; official JUCE doc
+  # juce-framework/JUCE@develop/docs/Linux Dependencies.md):
+  # juce_audio_devices and juce_audio_processors probe pkg-config for
+  # JACK and LADSPA unless these flags are set — and a plugin never
+  # hosts other plugins over JACK/LADSPA. Dropping these deps keeps a
+  # fresh Fedora bootstrap to core packages only.
+  JUCE_JACK=0
+  JUCE_PLUGINHOST_LADSPA=0)
 
 target_link_libraries(MakeGain PRIVATE
   juce::juce_audio_utils

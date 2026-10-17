@@ -113,16 +113,40 @@ linux_packages() {
   case "$PLATFORM" in
     linux)
       if have dnf; then
-        PKGS="git gcc-c++ cmake ninja-build alsa-lib-devel"
+        # JUCE Linux deps scoped to MakeGain's enabled modules + our flags
+        # (JUCE_WEB_BROWSER=0, JUCE_USE_CURL=0, JUCE_JACK=0,
+        # JUCE_PLUGINHOST_LADSPA=0 — see CMakeLists + official
+        # juce-framework/JUCE docs/Linux Dependencies.md).
+        # Core = developer tools; FT/X11 family is required by
+        # juce_graphics + juce_gui_basics (and therefore by juceaide, the
+        # build-time helper, even for plugin-only targets). GTK/GL are
+        # belt-and-braces for headless juceaide on some distros.
+        PKGS="git gcc-c++ cmake ninja-build \
+              alsa-lib-devel freetype-devel fontconfig-devel \
+              mesa-libGL-devel \
+              libX11-devel libXcomposite-devel libXcursor-devel \
+              libXext-devel libXinerama-devel libXrandr-devel \
+              libXrender-devel \
+              gtk3-devel"
         MGR="dnf"; MGR_ARGS="-y"
       elif have apt-get; then
-        PKGS="git g++ cmake ninja-build libasound2-dev"
+        # Same dependency set, Ubuntu/Debian spellings (official JUCE
+        # doc's full command minus curl/webkit/jack/ladspa thanks to our
+        # disabled-module flags).
+        PKGS="git g++ cmake ninja-build \
+              libasound2-dev libfreetype-dev libfontconfig1-dev \
+              libx11-dev libxcomposite-dev libxcursor-dev \
+              libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+              libglu1-mesa-dev mesa-common-dev"
         MGR="apt-get"; MGR_ARGS="-y"
       elif have pacman; then
-        PKGS="git gcc cmake ninja alsa-lib"
+        PKGS="git gcc cmake ninja \
+              alsa-lib freetype2 fontconfig libgl \
+              libx11 libxcomposite libxcursor \
+              libxext libxinerama libxrandr libxrender"
         MGR="pacman"; MGR_ARGS="--noconfirm"
       else
-        die "no dnf/apt/pacman found — install manually: a C++17 compiler, git, cmake(>=3.24), ninja, ALSA headers"
+        die "no dnf/apt/pacman found — install manually: a C++17 compiler, git, cmake(>=3.24), ninja, ALSA + freetype2 + fontconfig + X11(-devel) headers (official list: juce-framework/JUCE docs/Linux Dependencies.md)"
       fi ;;
   esac
 
