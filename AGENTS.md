@@ -27,3 +27,19 @@ Binding for any AI/agent working in this repository:
    directly — a unit of work lands on a branch, the owner pushes the
    branch, opens and merges the PR. Agents never push or merge (rule 2
    above stays absolute). Details: `docs/release-model.md`.
+6. **Comment standard (owner, 2026-10-17):** code must carry enough
+   comments for a reader with **limited framework knowledge** (decent C++
+   but *not* JUCE) to follow the process. Concretely, in addition to
+   "why" comments:
+   - every non-obvious framework call indirection gets a short
+     "what this means in framework terms" note at the call site;
+   - entry-point chain (no `main()` in plugins!) is documented in-place
+     *and* in `docs/code-tour.md`;
+   - build-side magic (juce_add_plugin metadata, format targets) is
+     annotated in `CMakeLists.txt`;
+   - lifecycle contracts (which thread, what a callback may not do) are
+     stated where the override appears — not assumed known;
+   - no comment narrating trivia; no comment that will rot with the next
+     refactor without maintenance.
+   - `docs/code-tour.md` is kept current whenever the file map or the
+     entry-point chain changes.
