@@ -44,5 +44,37 @@ FetchContent_MakeAvailable(Catch2)
 
 message(STATUS "JUCE ${JUCE_VERSION} available; clap_juce_extensions + Catch2 available")
 
-# --- plugin targets land in C3 (processor) and C4 (formats); ---------------
-# --- test targets land in C5. This file stays lean on purpose. -------------
+# --- plugin target (C3: VST3; C4 adds CLAP + AU) ----------------------------
+juce_add_plugin(MakeGain
+  PRODUCT_NAME              "MakeGain"
+  COMPANY_NAME              "auto-make-gain"
+  BUNDLE_ID                 "org.auto-make-gain.makegain"
+  PLUGIN_MANUFACTURER_CODE  Amkg
+  PLUGIN_CODE               Mkn1
+  FORMATS                   VST3
+  IS_SYNTH                  FALSE
+  NEEDS_MIDI_INPUT          FALSE
+  NEEDS_MIDI_OUTPUT         FALSE
+  IS_MIDI_EFFECT            FALSE
+  COPY_PLUGIN_AFTER_BUILD   TRUE)
+
+target_sources(MakeGain PRIVATE
+  src/plugin/MakeGainProcessor.cpp
+  src/plugin/MakeGainProcessor.h
+  src/ui/MakeGainEditor.cpp
+  src/ui/MakeGainEditor.h)
+
+target_include_directories(MakeGain PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+target_compile_definitions(MakeGain PUBLIC
+  JUCE_WEB_BROWSER=0
+  JUCE_USE_CURL=0
+  JUCE_VST3_CAN_REPLACE_VST2=0)
+
+target_link_libraries(MakeGain PRIVATE
+  juce::juce_audio_utils
+  juce::juce_audio_processors)
+
+# Disclaimer: JUCE 8 (AGPLv3 route) propagates to this program — AGPLv3,
+# see LICENSE and tech_specs §2.
