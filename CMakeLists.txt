@@ -87,3 +87,25 @@ clap_juce_extensions_plugin(TARGET MakeGain
 
 # Disclaimer: JUCE 8 (AGPLv3 route) propagates to this program — AGPLv3,
 # see LICENSE and tech_specs §2.
+
+# --- test target (C5): JUCE-independent, runs under sanitizers --------------
+# (TS §7: sanitizers stay OUT of plugin builds; only the unit-test lane.)
+enable_testing()
+
+add_executable(makegain_tests
+  tests/dsp/framework_sanity.cpp)
+
+target_link_libraries(makegain_tests PRIVATE
+  Catch2::Catch2WithMain)
+
+add_test(NAME framework COMMAND makegain_tests)
+
+if(MAKEGAIN_SANITIZERS)
+  # ASan (incl. LeakSanitizer) + UBSan, owner-approved memory-safety lane.
+  target_compile_options(makegain_tests PRIVATE
+    -fsanitize=address,undefined
+    -fno-omit-frame-pointer
+    -g)
+  target_link_options(makegain_tests PRIVATE
+    -fsanitize=address,undefined)
+endif()

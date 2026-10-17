@@ -24,6 +24,27 @@
     {
       "name": "linux-x64",
       "inherits": "base"
+    },
+    {
+      "name": "macos-sanitize",
+      "inherits": "macos",
+      "cacheVariables": {
+        "MAKEGAIN_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "linux-arm64-sanitize",
+      "inherits": "linux-arm64",
+      "cacheVariables": {
+        "MAKEGAIN_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "linux-x64-sanitize",
+      "inherits": "linux-x64",
+      "cacheVariables": {
+        "MAKEGAIN_SANITIZERS": "ON"
+      }
     }
   ]
 }
