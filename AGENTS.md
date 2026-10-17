@@ -18,7 +18,7 @@ Binding for any AI/agent working in this repository:
      of the implementation plan, and the owner agrees on it *before* coding;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
-4. When resuming a session, first read `README.md`, then
+5. When resuming a session, first read `README.md`, then
    `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
    `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
    backlog (§10). FRs are frozen: changes go through the owner, not silently.
