@@ -18,6 +18,14 @@ Binding for any AI/agent working in this repository:
      of the implementation plan, and the owner agrees on it *before* coding;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
+   - **Reference metrics** (owner, 2026-10-18) — warnings, not strict rules;
+     exceeding either needs explicit justification in the PR description:
+     - one PR (and its branch) stays **within 10 commits**;
+     - one PR touches **≤ 5–7 source files** — source = anything written
+       in a programming language *including shell/build scripts*; docs
+       (md, txt) do not count;
+     these metrics presume the commit size/atomicity above unchanged (they
+     are the base unit; the PR sizing builds on top of it).
 5. When resuming a session, first read `README.md`, then
    `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
    `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
