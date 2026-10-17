@@ -37,7 +37,7 @@ Pins (record, to be set precisely at commit 2):
 
 | # | Commit | Contents | Checkpoint (owner action) |
 |---|---|---|---|
-| C1 | `build: repo hygiene + developer bootstrap` | `.gitignore`; `scripts/bootstrap.sh`; one-line README pointer | ✅ run bootstrap on **mac** and **Asahi** — both must end with "ready" |
+| C1 | `build: repo hygiene + developer bootstrap` | `.gitignore`; `scripts/bootstrap.sh`; one-line README pointer | ✅ mac: passed 2026-10-17 · **Fedora: PENDING (owner reboots to cold state)** |
 | C2 | `build: CMake skeleton + fetch pins (JUCE/clap/Catch2)` | root `CMakeLists.txt`, `cmake/*`, `CMakePresets.json` (macos / linux-arm64 / linux-x64), `cmake/VerifyPins.cmake` | ✅ `cmake --preset macos` configures and JUCE downloads (first run: minutes) |
 | C3 | `plugin: passthrough stub + editor shell (VST3)` | `src/plugin/makegain_processor.{h,cpp}` (silence-preserves passthrough, no params yet), `src/ui/editor.{h,cpp}` (empty window), VST3 target | `cmake --build` produces `MakeGain.vst3` |
 | C4 | `plugin: CLAP + AU format targets` | clap-juce-extensions target, AU target (mac only) | ✅ load **all three formats in Reaper on your Mac** (training stub: passes audio untouched) |

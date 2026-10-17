@@ -12,5 +12,6 @@ details: [`functional_reqs/`](functional_reqs/MakeGain_FR-v1.md)).
 - Licence: **AGPLv3** — see [`LICENSE`](LICENSE)
 
 ## Docs
+- **Fresh machine?** `./scripts/bootstrap.sh` — checks/installs the build toolchain (details: [`docs/m0-plan.md`](docs/m0-plan.md))
 - [Functional requirements](functional_reqs/MakeGain_FR-v1.md) — frozen contract (v1)
 - [Technical specification](tech_specs/MakeGain_TS-v0.1.md) — draft v0.1, veto items in §9

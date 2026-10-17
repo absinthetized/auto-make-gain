@@ -1,0 +1,22 @@
+# --- build products ---------------------------------------------------
+build/
+build-*/
+cmake-build-*/
+out/
+dist/
+artifacts/
+
+# --- dependency fetches (FetchContent lands inside build dirs, but be explicit) ---
+_deps/
+vendor/
+
+# --- generated metadata -----------------------------------------------
+compile_commands.json
+CMakeUserPresets.json
+
+# --- OS / editor noise -------------------------------------------------
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
