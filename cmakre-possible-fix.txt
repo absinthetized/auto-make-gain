@@ -1,0 +1,19 @@
+# Fix: JUCE Build Failure on Fedora Asahi (ARM64)
+
+## Problem
+
+CMake fails to build `juceaide` due to missing system libraries:
+
+- `ft2build.h` not found → missing `freetype2`
+- `X11/Xlib.h` not found → missing `libX11`
+- `freetype2`, `fontconfig`, `gl`, `libcurl`, `webkit2gtk-4.0`, `gtk+-x11-3.0` not found via pkg-config
+
+## Fix
+
+Install the required dev packages:
+
+```bash
+sudo dnf install freetype-devel fontconfig-devel mesa-libGL-devel \
+  libcurl-devel webkit2gtk4-devel gtk3-devel \
+  libX11-devel libXrandr-devel libXinerama-devel \
+  libXcursor-devel libXi-devel libXext-devel
