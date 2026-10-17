@@ -28,6 +28,12 @@ should be patched in the next related PR.
   (`mN[-descriptor]`, `fix-*`) and land via owner's PR.
 - Requirements (FRs) are frozen contract; changes go through the owner,
   never silently.
+- Never operate system components directly (AGENTS.md §8): Linux build/test
+  containers are run **only through committed repo scripts**
+  (`scripts/docker-check.sh` style) — agents generate code, they do not call
+  `docker` or touch the host system themselves. On script failure, report
+  the error verbatim; system-level fixes (daemon, drivers, host config)
+  belong to the owner.
 
 ## Commit & PR sizing (commit policy, AGENTS.md §4)
 

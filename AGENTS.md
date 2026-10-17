@@ -26,16 +26,16 @@ Binding for any AI/agent working in this repository:
        (md, txt) do not count;
      these metrics presume the commit size/atomicity above unchanged (they
      are the base unit; the PR sizing builds on top of it).
-5. When resuming a session, first read `README.md`, then
+5. **Session resume:** first read `README.md`, then
    `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
    `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
    backlog (§10). FRs are frozen: changes go through the owner, not silently.
-5. **Release & branching model (owner, 2026-10-17):** from the commit that
+6. **Release & branching model (owner, 2026-10-17):** from the commit that
    introduces `docs/release-model.md` onward, agents never work on `main`
    directly — a unit of work lands on a branch, the owner pushes the
    branch, opens and merges the PR. Agents never push or merge (rule 2
    above stays absolute). Details: `docs/release-model.md`.
-6. **Comment standard (owner, 2026-10-17):** code must carry enough
+7. **Comment standard (owner, 2026-10-17):** code must carry enough
    comments for a reader with **limited framework knowledge** (decent C++
    but *not* JUCE) to follow the process. Concretely, in addition to
    "why" comments:
@@ -51,3 +51,11 @@ Binding for any AI/agent working in this repository:
      refactor without maintenance.
    - `docs/code-tour.md` is kept current whenever the file map or the
      entry-point chain changes.
+8. **Docker containment lane (owner, 2026-10-18):** an agent may run Linux
+   build/test containers, but **only through committed repo scripts**
+   (e.g. `scripts/docker-check.sh`) — never by calling `docker` (or any other
+   system tooling) directly. The agent's output is **code, not system
+   operation**: no direct interaction with Docker, package managers of the
+   host, or system services. If a container script fails, the agent reports
+   the error verbatim and stops; system-level remediation (Docker daemon,
+   driver/host configuration) belongs to the owner/sysadmin.
