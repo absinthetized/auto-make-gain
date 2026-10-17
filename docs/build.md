@@ -15,7 +15,8 @@ DAW. Nothing here assumes pre-installed tools.
 
 > Therefore: anything tagged on this PR's merge describes **macOS-side
 > validation only**. Linux compile/run validation is the explicit job of
-> the next branch (Docker inner loop) plus a final native Asahi session.
+> the `m0-linux-inner-loop` branch (Docker inner loop, §8) plus a final
+> native Asahi session.
 
 ---
 
@@ -148,3 +149,43 @@ Release packaging with proper signing/notarization is a post-M0 milestone
 
 Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are
 deliberate, not incidental (AGENTS.md policy).
+
+## 8. Linux compile/test inner loop on the Mac (Docker)
+
+Rebooting into Fedora Asahi for every compile/test cycle is too slow. This
+branch therefore establishes a **two-tier loop**:
+
+| Tier | What it covers | Frequency |
+|---|---|---|
+| **Tier 1 — Docker on the mac** | Linux configure + build + ctest (incl. sanitizer lane) inside an arm64 Fedora container *natively* on Apple Silicon — no emulation | every commit |
+| **Tier 2 — bare-metal Asahi** | the oracle for what Tier 1 cannot see: bootstrap on real hardware, DAW load (Reaper/Ardour), PipeWire audio | per milestone |
+
+**Prerequisite:** any arm64-capable Docker environment (OrbStack, Docker
+Desktop, colima — any is fine; this lane uses plain `docker build`/`docker
+run`, nothing vendor-specific).
+
+**Why a *stock* Fedora container is a faithful stand-in for the Remix**
+(checked 2026-10-18 against Asahi's own docs): Fedora Asahi Remix
+differs from upstream Fedora only in forked **kernel** (`kernel-16k`),
+**mesa** (Apple GPU), `m1n1`/u-boot and audio-userland daemons — none of
+which a compile/test lane exercises. Everything we touch (gcc, cmake,
+ninja, freetype/fontconfig/X11/GL/ALSA *headers*) is plain Fedora
+packaging. Version-skew guard: pin the container to the Remix's release
+(`fedora:44`, not `:latest`), and once per machine provisioning compare
+`gcc --version` inside the container vs. on the Asahi box.
+
+**Manual lane (works today; the `scripts/docker-check.sh` wrapper +
+`docker/fedora-dev.Dockerfile` land in this branch's next commits):**
+
+```sh
+# once: provisioned image (same dnf package list as scripts/bootstrap.sh)
+docker build -t makegain-fedora-dev - < docker/fedora-dev.Dockerfile
+
+# every cycle:
+docker run --rm -v "$PWD":/work -w /work makegain-fedora-dev \
+  bash -c 'cmake --preset linux-arm64 && cmake --build build/linux-arm64 && ctest --test-dir build/linux-arm64'
+```
+
+Sanitizer lane runs the same way with the `MAKEGAIN_SANITIZERS` preset
+flag (§3). What the container can never answer: *does the plugin load and
+behave inside a real DAW* — that stays Tier 2, by design.
