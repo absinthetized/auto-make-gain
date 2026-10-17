@@ -22,3 +22,8 @@ Binding for any AI/agent working in this repository:
    `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
    `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
    backlog (§10). FRs are frozen: changes go through the owner, not silently.
+5. **Release & branching model (owner, 2026-10-17):** from the commit that
+   introduces `docs/release-model.md` onward, agents never work on `main`
+   directly — a unit of work lands on a branch, the owner pushes the
+   branch, opens and merges the PR. Agents never push or merge (rule 2
+   above stays absolute). Details: `docs/release-model.md`.

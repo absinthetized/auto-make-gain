@@ -43,7 +43,7 @@ Pins (record, to be set precisely at commit 2):
 | C4 | `plugin: CLAP + AU format targets` | clap-juce-extensions target, AU target (mac only) | ✅ **owner PASSED 2026-10-17**: all three formats load in Reaper (flawless) |
 | C5 | `tests: Catch2 wiring + sanitizer presets` | `tests/dsp/*` (one placeholder test that the empty framework passes), `scripts/check-all.sh` (builds all presets + runs ctest; the local stand-in for CI) | ✓ mac: ALL GREEN (default + ASan/UBSan lane) · Fedora pending cold-reboot checkpoint |
 | C6 | `docs: developer build guide (macOS / Fedora Asahi)` | `docs/build.md`: exact OS-by-OS commands, first-run JUCE download notes, ad-hoc mac code-sign/Gatekeeper notes, "load in Reaper/Ardour" quick test, troubleshooting section (doc-only skeleton at first, grown from C1–C5 friction) | ✅ fresh `git clone` in a new dir → follow doc → Reaper accepts the plugin, with zero knowledge beyond the doc |
-| C7 | `milestone: tag m0` | release notes blurb in `docs/build.md` (or CHANGELOG head) | ✅ owner approves tag |
+| C7 | `milestone: v0.1.0` (renamed 2026-10-17, see release-model.md) | CHANGELOG.md execution + release notes blurb; tag **after** the Asahi gate, post-merge on `main` | ✅ owner approves the tag itself |
 
 ## Explicit non-goals of M0
 

@@ -242,6 +242,16 @@ src/
 - Noise/silence gate *skipping* in computation (deferred idea, FR doc §9).
 - CI enablement (deferred from v0 by FR-18; presets first).
 
+## 11. Resolved backlog items
+
+- **Release & branching model** — resolved 2026-10-17; ratified text in
+  [../docs/release-model.md](../docs/release-model.md) (introduced by the
+  first model-exercise PR). Key rulings: work-unit = branch = PR
+  (milestone = largest PR); semver tags only — `v0.1.0` = M0 post-Asahi,
+  `v1.0.0` triggers on completing the full frozen FR contract; no GitHub
+  Releases before v1.0.0; CHANGELOG.md born at `v0.1.0`; `main` protected
+  with PRs required, owner-exempt force-push; agents never push or merge.
+
 ### Decision log — language vote, closed 2026-10-17
 - **Path A confirmed by owner**: pure C++20 + JUCE for v1.
 - Rejected: **Path B** (JUCE C++ shell + Rust DSP core via `cxx` — two
