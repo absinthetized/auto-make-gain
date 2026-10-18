@@ -8,10 +8,10 @@ DAW. Nothing here assumes pre-installed tools.
 | Check | macOS 27/arm64 | Fedora Asahi aarch64 |
 |---|---|---|
 | bootstrap | ✅ passed | ✅ ran (deps list was incomplete → fix landed, merged in PR #1) |
-| cmake configure (juceaide, deps fetch) | ✅ | ✅ **in container** (`fedora:44`, gcc 16.2.1) — pins resolved (JUCE 8.0.15 / clap-ext `7adee3a` / Catch2 v3.16.1), juceaide built+tested; **native Asahi re-run ⏳** |
-| build all formats | ✅ VST3/CLAP/AU | ✅ **in container** — VST3+CLAP for aarch64-linux, both lanes; **native Asahi rebuild ⏳** |
-| ctest (incl. sanitizers) | ✅ | ✅ **in container** — both lanes pass (sanitizer: ASan/UBSan/LSan); **native Asahi run ⏳** |
-| load in DAW | ✅ Reaper (flawless) | ❌ NOT validated — **deliberately Tier-2 scope**; artifacts transferable via pen per §8.1 (compatibility guard in 8.1.1) |
+| cmake configure (juceaide, deps fetch) | ✅ | ✅ **in container** (`fedora:44`, gcc 16.2.1) — pins resolved (JUCE 8.0.15 / clap-ext `7adee3a` / Catch2 v3.16.1), juceaide built+tested |
+| build all formats | ✅ VST3/CLAP/AU | ✅ — VST3+CLAP for aarch64-linux, both lanes, in container on the pinned fedora:44 toolchain |
+| ctest (incl. sanitizers) | ✅ | ✅ both lanes pass in container (sanitizer: ASan/UBSan/LSan) |
+| load in DAW | ✅ Reaper (flawless) | ✅ **bare-metal, 2026-10-18**: Reaper VST3+CLAP, Ardour 9.8 VST3 — artifacts pen-transferred per §8.1; compatibility guard passed (Asahi gcc = container gcc `16.2.1-2` to the patch digit, so transfer = build equality). ⏳ Ardour + CLAP: not detected in 9.8 — parked to next milestone, diagnosis checklist in §6 (below) |
 
 > Therefore: anything tagged on this PR's merge describes **macOS-side
 > validation only**. Linux compile/run validation is the explicit job of
@@ -138,6 +138,18 @@ Release packaging with proper signing/notarization is a post-M0 milestone
    this guide and removed from the tree (owner-ordered 2026-10-18);
    future incidents follow the same path: incident file → absorb here →
    delete.
+10. **Ardour does not see the CLAP while Reaper does** (observed 2026-10-18,
+    deferred to the next milestone by owner): Reaper loading the `.clap`
+    proves the file itself is valid, so this is host-side. Diagnosis
+    checklist, cheapest first: (1) also copy to `~/.local/share/clap`
+    (Xdg data dir is Ardour's preferred CLAP path; nothing creates it);
+    (2) Window → Plugin Manager → *Discover New/Updated*, then **restart
+    Ardour** (new plugins can stay unusable until restart); (3) check
+    Edit → Preferences → Plugins for a per-type CLAP switch, and read any
+    *Error* row in Plugin Manager — a concrete error text is the most
+    valuable finding; (4) name the build source (ardour.org prebuilt =
+    full support; Fedora package / Flathub = possibly compiled without
+    CLAP or sandboxed away from `~/.clap`).
 
 ## 7. Dependency pins (what fetched at configure)
 
