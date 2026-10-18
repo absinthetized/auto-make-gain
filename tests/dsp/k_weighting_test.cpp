@@ -3,8 +3,12 @@
 // What is asserted (the specification, reviewed by the owner before any
 // implementation exists — AGENTS.md rule 8):
 //
-//   A1. Unity at 1 kHz: |H| = 1 ± 0.05 dB. BS.1770 anchors the K-weighted
-//       scale so a 1 kHz sine measures unweighted.
+//   A1. Anchor at 1 kHz: |H| = +0.691 dB ± 0.1. (Spec-level correction
+//       after review of the first red: the K-weighting chain has ~+0.691
+//       dB gain at 997 Hz BY DESIGN — the −0.691 constant in the BS.1770
+//       loudness formula, L = −0.691 + 10·log10(mean square), exists to
+//       cancel it, so a 997 Hz reference tone reads its dBFS level.
+//       The filter does NOT have unity gain at 1 kHz.)
 //   A2. High shelf: |H| ≈ +4 dB at both 5 kHz and 10 kHz (±0.6 dB).
 //       Published shelf gain G = 3.99984 dB above the corner (~1.7 kHz).
 //   A3. Low-frequency rejection (relational, not absolute): gain(20 Hz)
@@ -70,9 +74,10 @@ double to_db(double linear) { return 20.0 * std::log10(linear); }
 // (identity IS unity at 1 kHz) — an accepted, expected red, since unity
 // at 1 kHz is the one property an identity filter legitimately has.
 
-TEST_CASE("K-weighting: unity at 1 kHz (A1)", "[kweighting]") {
+TEST_CASE("K-weighting: anchor +0.691 dB at 1 kHz (A1)", "[kweighting]") {
   const double g = measured_gain_linear(48000.0, 1000.0);
-  REQUIRE(to_db(g) == Catch::Approx(0.0).margin(0.05));
+  // +0.691 dB: the chain gain the −0.691 loudness constant cancels.
+  REQUIRE(to_db(g) == Catch::Approx(0.691).margin(0.1));
 }
 
 TEST_CASE("K-weighting: high shelf +4 dB (A2)", "[kweighting]") {
@@ -112,7 +117,7 @@ TEST_CASE("K-weighting: sample-rate adaptation (A4)", "[kweighting]") {
   for (const double sr : {44100.0, 48000.0, 96000.0}) {
     const double g_1k = measured_gain_linear(sr, 1000.0);
     const double g_10k = measured_gain_linear(sr, 10000.0);
-    REQUIRE(to_db(g_1k) == Catch::Approx(0.0).margin(0.05));
+    REQUIRE(to_db(g_1k) == Catch::Approx(0.691).margin(0.1));
     REQUIRE(to_db(g_10k) == Catch::Approx(4.0).margin(0.6));
   }
 }
