@@ -101,7 +101,14 @@ clap_juce_extensions_plugin(TARGET MakeGain
 enable_testing()
 
 add_executable(makegain_tests
-  tests/dsp/framework_sanity.cpp)
+  tests/dsp/framework_sanity.cpp
+  tests/dsp/k_weighting_test.cpp
+  tests/dsp/loudness_meter_test.cpp
+  src/dsp/k_weighting.cpp
+  src/dsp/loudness_meter.cpp)
+
+# dsp/ is JUCE-free and its headers are included by name from the tests
+target_include_directories(makegain_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/dsp)
 
 target_link_libraries(makegain_tests PRIVATE
   Catch2::Catch2WithMain)

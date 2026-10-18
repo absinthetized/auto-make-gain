@@ -42,6 +42,10 @@ should be patched in the next related PR.
 - **Commit cadence:** one commit at a time; the agent shows the exact
   content (diff) first, and commits only on a per-commit explicit "ok" —
   batch approvals cover the plan, not the commits (AGENTS.md §4).
+- **Red/green discipline (AGENTS.md §8):** no implementation before its
+  tests — RED commit (tests + honest stub, failing output quoted) then
+  GREEN commit (real implementation, passing output quoted); the owner
+  reviews assertions before implementation exists.
 - Reference metrics (warnings, not strict rules — justify in the PR
   description when exceeded):
   - ≤ 10 commits per PR/branch;

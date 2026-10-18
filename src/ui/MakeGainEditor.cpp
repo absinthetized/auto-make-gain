@@ -28,6 +28,10 @@ void MakeGainEditor::paint (juce::Graphics& g)
 
     g.setFont (juce::FontOptions (13.0f));
     g.setColour (juce::Colour (0xff8a9099)); // dim grey
-    g.drawText ("M0 stub \u2014 passthrough, no DSP yet",
+    // Status line: states what this build actually contains, so a host
+    // load-check is self-verifying (the label must match the branch's
+    // promised behavior). Updated manually once per PR — if this text is
+    // wrong about the loaded binary, the wrong build is loaded.
+    g.drawText ("M1 PR-A \u2014 DSP kernels tested; signal path: passthrough",
                 getLocalBounds().removeFromBottom (40), juce::Justification::centred);
 }
