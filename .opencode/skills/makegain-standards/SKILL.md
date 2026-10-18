@@ -39,6 +39,9 @@ should be patched in the next related PR.
 
 - Atomic, human-readable commits; commit-breakdown plan agreed *before*
   coding an implementation phase.
+- **Commit cadence:** one commit at a time; the agent shows the exact
+  content (diff) first, and commits only on a per-commit explicit "ok" —
+  batch approvals cover the plan, not the commits (AGENTS.md §4).
 - Reference metrics (warnings, not strict rules — justify in the PR
   description when exceeded):
   - ≤ 10 commits per PR/branch;
