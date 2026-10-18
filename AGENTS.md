@@ -57,7 +57,16 @@ Binding for any AI/agent working in this repository:
      refactor without maintenance.
    - `docs/code-tour.md` is kept current whenever the file map or the
      entry-point chain changes.
-8. **Docker containment lane (owner, 2026-10-18):** an agent may run Linux
+8. **Red/green testing discipline (owner, 2026-10-18):** no
+   implementation may exist before its tests. Every test-covered unit
+   lands in two commits: a **RED** commit (tests + an honest stub that
+   compiles but obviously cannot satisfy them; the failing checkpoint
+   output is quoted in the message) and a **GREEN** commit (the real
+   implementation; the same tests now pass, output quoted). The owner
+   reviews the assertions before the implementation exists. A red commit
+   failing the build gate is intentional and acceptable while no CI
+   exists; bisectability is preserved across green commits.
+9. **Docker containment lane (owner, 2026-10-18):** an agent may run Linux
    build/test containers, but **only through committed repo scripts**
    (e.g. `scripts/docker-check.sh`) — never by calling `docker` (or any other
    system tooling) directly. The agent's output is **code, not system
