@@ -233,3 +233,32 @@ Caveats that keep this honest (ruling 2026-10-18):
 4. **Scope:** owner-to-owner transfer between his own machines only. The
    repo's distribution promise stays FR-18's *clone and build* — binaries
    never leave the owner's ecosystem as project deliverables.
+
+### 8.2 Cross-arch lane: amd64 under Rosetta (`--x64`)
+
+The `linux-x64` / `linux-x64-sanitize` CMake presets exist, but no native
+amd64 machine is part of the validation matrix (FR scope is arm64-first).
+To still exercise the DSP tests against genuinely different codegen +
+libm — the arch-invariance question — `scripts/docker-check.sh` accepts
+`--x64` (decision recorded in `docs/m1-plan.md`, 2026-10-18):
+
+```sh
+scripts/docker-check.sh --x64
+```
+
+- builds the same `docker/fedora-dev.Dockerfile` with `--platform
+  linux/amd64`, tagged `makegain-fedora-dev:x64` (separate tag and layer
+  cache from the arm64 image — switching lanes never thrashes cache);
+- runs the `linux-x64` + `linux-x64-sanitize` presets and ctest inside;
+- on the owner's mac this executes under Docker Desktop's Rosetta
+  emulation — enable **"Use Rosetta for x86_64/amd64 emulation on Apple
+  Silicon"** in Docker Desktop settings, or it silently falls back to
+  QEMU (much slower, occasionally flaky).
+
+What this lane claims, and what it doesn't: the same source compiles
+clean and every assertion passes under amd64 gcc/glibc — evidence for
+the arch invariance of the DSP kernels (margins absorb libm/codegen
+variance). It is **not** evidence about real amd64 hardware or audio
+behavior; Tier 2 on bare metal remains the oracle for that. Cadence:
+on-demand / pre-PR, not per-commit — first provisioning is slow
+(~30–90 min under emulation), later runs are layer-cached.

@@ -10,34 +10,70 @@
 #   - system-level fixes (Docker daemon, drivers, host config) belong to
 #     the owner/sysadmin.
 #
+# Usage:
+#   scripts/docker-check.sh          # native arm64 lane (default)
+#   scripts/docker-check.sh --x64    # amd64 lane, Rosetta-emulated on the
+#                                    # Apple Silicon mac (docs/build.md §8.2)
+#
 # Idempotent: `docker build` below is layer-cached — after the first
 # provisioning run it costs ~1 second unless scripts/bootstrap.sh changed.
+# The --x64 image has its own tag and layer cache; its FIRST provisioning
+# compiles the whole toolchain workload under emulation (~30-90 min).
 #
 # What it validates inside the fedora-dev image:
-#   1. configure  - cmake --preset linux-arm64 (first run fetches pinned JUCE)
-#   2. build      - all plugin formats (VST3 + CLAP) for Linux aarch64
+#   1. configure  - cmake --preset <preset> (first run fetches pinned JUCE)
+#   2. build      - all plugin formats (VST3 + CLAP)
 #   3. ctest      - Catch2 DSP unit tests
 #   4. the same three steps under the sanitizer preset
-#      (linux-arm64-sanitize: ASan + UBSan + LeakSanitizer, test lane only)
+#      (ASan + UBSan + LeakSanitizer, test lane only)
 #
 # What it can never validate: DAW load & audio behaviour on the real
-# machine — that is Tier 2, by design (build.md §8).
+# machine — that is Tier 2, by design (build.md §8). The --x64 lane adds
+# cross-architecture evidence (different codegen + libm against the same
+# assertions); it is still an emulated environment, not a claim about
+# real amd64 hosts.
 set -euo pipefail
 
-IMAGE=makegain-fedora-dev:latest
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # repo root, script-location independent
+
+# Lane selection. Plain string flags (no arrays) so the script also runs
+# under macOS's stock bash 3.2, where empty-array expansion trips `set -u`.
+case "${1:-}" in
+  "")
+    PLATFORM=""
+    IMAGE=makegain-fedora-dev:latest
+    PRESETS="linux-arm64 linux-arm64-sanitize"
+    ARCH_LABEL="arm64 (native in Docker Desktop's Linux VM)"
+    ;;
+  --x64)
+    PLATFORM="linux/amd64"
+    IMAGE=makegain-fedora-dev:x64
+    PRESETS="linux-x64 linux-x64-sanitize"
+    ARCH_LABEL="amd64 (Rosetta-emulated)"
+    ;;
+  *)
+    echo "usage: $0 [--x64]" >&2
+    exit 2
+    ;;
+esac
 
 cd "$ROOT"
 
-echo "==> [1/2] building image (layer-cached; slow only on first provisioning)"
-docker build --tag "$IMAGE" -f docker/fedora-dev.Dockerfile .
+BUILD_FLAGS=""
+RUN_FLAGS=""
+if [[ -n "$PLATFORM" ]]; then
+  BUILD_FLAGS="--platform $PLATFORM"
+  RUN_FLAGS="--platform $PLATFORM"
+fi
 
-run_lane() {
-  preset="$1"
+echo "==> [1/2] building image (layer-cached; slow only on first provisioning)"
+docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile .
+
+for preset in $PRESETS; do
   echo "==> [2/2] lane: ${preset}"
   # The preset name is interpolated by the OUTER shell (local variable),
   # then the whole block runs inside the container with bash -u -e.
-  docker run --rm --tty \
+  docker run --rm --tty $RUN_FLAGS \
     --volume "$ROOT":/work --workdir /work \
     "$IMAGE" bash -uec "
       echo \"--- configure: ${preset}\"
@@ -47,11 +83,8 @@ run_lane() {
       echo \"--- ctest: ${preset}\"
       ctest --test-dir build/${preset} --output-on-failure
     "
-}
-
-run_lane linux-arm64
-run_lane linux-arm64-sanitize
+done
 
 echo
-echo "ALL GREEN — Linux arm64 configure+build+ctest passed in-container."
+echo "ALL GREEN — Linux ${ARCH_LABEL} configure+build+ctest passed in-container."
 echo "(Host-load validation stays Tier 2: bare-metal Asahi, build.md §8.)"
