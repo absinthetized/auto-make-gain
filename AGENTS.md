@@ -7,6 +7,9 @@ Binding for any AI/agent working in this repository:
    implied).
 2. **Never push.** `git push` is prohibited for agents. Pulling / fetching /
    diffing against remote is explicitly encouraged at the start of a session.
+   **Tags are the owner's ceremony** (owner, 2026-10-19): agents never
+   create, move or push tags — not even locally; they prepare the
+   release-notes material (`CHANGELOG.md`) for the owner's cut.
 3. Working language: keep user-facing replies in English; doc files follow
    repo convention (English).
 4. **Commit policy** (owner, 2026-10-17):
@@ -55,8 +58,10 @@ Binding for any AI/agent working in this repository:
      stated where the override appears — not assumed known;
    - no comment narrating trivia; no comment that will rot with the next
      refactor without maintenance.
-   - `docs/code-tour.md` is kept current whenever the file map or the
-     entry-point chain changes.
+   - `docs/code-tour.md` is kept current **at milestone merges**
+     (cadence relaxed per owner, 2026-10-19 — per-PR currency proved
+     unsustainable): at a milestone's merge the file map and the
+     entry-point chain must not be stale.
 8. **Red/green testing discipline (owner, 2026-10-18):** no
    implementation may exist before its tests. Every test-covered unit
    lands in two commits: a **RED** commit (tests + an honest stub that

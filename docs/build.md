@@ -162,6 +162,15 @@ Release packaging with proper signing/notarization is a post-M0 milestone
 Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are
 deliberate, not incidental (AGENTS.md policy).
 
+**Dependencies of record** (owner, 2026-10-19): this section +
+`scripts/bootstrap.sh` (the executable source for *development package*
+lists, incl. the sanitizer runtimes the sanitize lane links against).
+The Linux header-map authority is JUCE's official
+[`docs/Linux Dependencies.md`](https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md)
+(external to this repo; comments elsewhere citing it by name mean that
+upstream file, never a repo-local one). No separate in-repo
+`dependencies.md` will be maintained — see the lean-ceremony ruling.
+
 ## 8. Linux compile/test inner loop on the Mac (Docker)
 
 Rebooting into Fedora Asahi for every compile/test cycle is too slow. This
