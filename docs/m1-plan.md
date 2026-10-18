@@ -132,6 +132,29 @@ to carry three distro × two-arch combinatorics — the payoff
 belongs to the public-adoption phase, not the M1 build-out. Revisit
 when CI exists; Debian-stable-only is the first cut if/when revived.
 
+**x64 lane evidence record (2026-10-19, first full `--x64` pass,
+branch `m1-x64-rosetta-lane`):**
+
+- `linux-x64` lane: configure + build + ctest ALL GREEN under
+  Rosetta-emulated amd64 (fedora:44, gcc 16.2.1-2 — same release and
+  compiler build as the Asahi Remix's aarch64 userland, now proven on
+  the x86_64 ABI). All 26 Catch2 assertions / 11 cases pass, including
+  the K-weighting anchor (+0.691 Table-1 argument), the loudness
+  golden signals (B1 −3.0 LUFS), and the B4 cross-tie — the sealed
+  cross-arch evidence promised by the arch-coverage decision above.
+- `linux-x64-sanitize` lane: first provisioning attempt exposed an
+  environment gap — the link failed with `ld.bfd: cannot find
+  /usr/lib64/libasan.so.8.0.0`: bootstrap.sh (the single dep source)
+  never listed the sanitizer runtimes, and dnf's dependency resolution
+  supplied them on aarch64 but not on x86_64. Fixed by installing
+  `libasan` + `libubsan` explicitly (`d8c740b`); the re-run then
+  linked and passed clean (`100% tests passed`), also under
+  ASan/UBSan/LSan. Lesson recorded: lane-critical runtimes are
+  explicit in bootstrap.sh, never by dependency luck.
+- Standing caveat (build.md §8.2): this lane is emulated codegen/libm
+  evidence, not a claim about real amd64 hardware or audio behavior;
+  Tier 2 on bare metal remains the oracle for host behavior.
+
 ## Out of scope for M1 (deferred, per FR/TS)
 
 stereo/dual-mono metering (UX-Q5), perceptual gate thresholds (FR-14
