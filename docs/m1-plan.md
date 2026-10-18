@@ -122,6 +122,16 @@ PR-A closes with the aarch64 verbatim evidence; amd64 evidence lands with
 that lane. macOS x86_64 stays out of scope (no hardware; FR scope is
 arm64-first).
 
+**Dismissed, recorded as future improvement (owner, 2026-10-19):**
+adding Debian stable and/or Arch container lanes (via thin
+`Dockerfile`s + `--distro` flag, exercising bootstrap.sh's currently
+untested apt/pacman package branches and the "old gcc" end of the
+compiler range). Dismissed for now: the project is not mature enough
+to carry three distro × two-arch combinatorics — the payoff
+(README minimum-compiler claims, package-list validation) is real but
+belongs to the public-adoption phase, not the M1 build-out. Revisit
+when CI exists; Debian-stable-only is the first cut if/when revived.
+
 ## Out of scope for M1 (deferred, per FR/TS)
 
 stereo/dual-mono metering (UX-Q5), perceptual gate thresholds (FR-14
