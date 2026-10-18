@@ -128,6 +128,14 @@ linux_packages() {
               libXext-devel libXinerama-devel libXrandr-devel \
               libXrender-devel \
               gtk3-devel"
+        # Sanitizer runtimes are NOT optional extras: the sanitize test
+        # lane (linux-*-sanitize presets) links with
+        # -fsanitize=address,undefined and needs them explicitly. Found
+        # the hard way 2026-10-19: on x86_64 the link failed with
+        #   ld.bfd: cannot find /usr/lib64/libasan.so.8.0.0
+        # because the runtimes arrived by dependency resolution on one
+        # arch but not the other. Explicit here = deterministic on both.
+        PKGS="$PKGS libasan libubsan"
         MGR="dnf"; MGR_ARGS="-y"
       elif have apt-get; then
         # Same dependency set, Ubuntu/Debian spellings (official JUCE
