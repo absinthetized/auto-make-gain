@@ -67,6 +67,20 @@ preserved *across* green commits.
 PR-A's host-facing behavior is still passthrough (the kernel is built but
 not wired) — one mac Reaper load-check confirms nothing regressed.
 
+**Verification record (2026-10-18):**
+
+- macOS arm64 (Xcode clang): `All tests passed (26 assertions in 11 test
+  cases)` per red/green commit messages (C2 red → C3 green → C4 red →
+  C5 green).
+- Linux aarch64 (fedora:44 container, gcc 16.2.1, glibc — different
+  codegen + libm): both lanes — `linux-arm64` and
+  `linux-arm64-sanitize` (ASan/UBSan/LSan) — configure + build + ctest
+  `ALL GREEN` via `scripts/docker-check.sh`. The K-weighting golden
+  assertions and loudness anchor (−0.691 calibration argument) hold
+  across both architectures: margins absorb libm/codegen variance, and
+  where certainty was needed the spec cites analytic values verified
+  against the standard's own Table 1 coefficients.
+
 ### PR-B `m1-gain-compute-ui` — the compensate machine (~7 commits, ~6 files)
 
 | # | Commit | Files |
