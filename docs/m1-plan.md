@@ -94,6 +94,20 @@ not wired) — one mac Reaper load-check confirms nothing regressed.
 | editor repaint cost | UI receives an atomic snapshot struct, repaint is decoupled from metering |
 | automation of Active while in ADJUST | FR-5 semantics: leaving to IDLE preserves the reference; re-engage never re-trains |
 
+## Arch-coverage decision (owner, 2026-10-18)
+
+Current test coverage: macOS arm64 (native) + Linux aarch64 (container
+lane). Linux x86_64 has a CMake preset but is exercised nowhere yet.
+Decision: close the amd64 gap as its **own PR during M1** —
+`m1-x64-rosetta-lane` — extending `scripts/docker-check.sh` with an
+`--x64` mode that builds the same fedora image with
+`--platform linux/amd64` (Rosetta emulation on the owner's mac) and runs
+the `linux-x64` preset + ctest inside. The lane is understood to be slow
+(emulated) and therefore on-demand/pre-PR, not per-commit. This branch's
+PR-A closes with the aarch64 verbatim evidence; amd64 evidence lands with
+that lane. macOS x86_64 stays out of scope (no hardware; FR scope is
+arm64-first).
+
 ## Out of scope for M1 (deferred, per FR/TS)
 
 stereo/dual-mono metering (UX-Q5), perceptual gate thresholds (FR-14
