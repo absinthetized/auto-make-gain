@@ -18,11 +18,14 @@
 //       history — feed amp 0.5 for 5 s, then amp 1.0 for 3.2 s: both
 //       metrics read the steady levels of amp 1.0 (old audio fully aged
 //       out of the 3.0 s window).
-//   B4. Metric consistency (the pairing property our gain computer
-//       relies on, FR-8): for the 997 Hz reference tone,
-//       lufs − db_rms ≈ +0.691 (K-weighting's gain at the anchor,
-//       cancelled by the loudness constant). This cross-checks both
-//       metrics against each other in one assertion.
+//   B4. Metric cross-tie at the anchor (the FR-8 pairing property,
+//       corrected while preparing the green): for the 997 Hz reference
+//       tone, lufs - db_rms = -0.691 + 20*log10(chain_gain). With the
+//       chain gain +0.691 dB at the anchor and the -0.691 loudness
+//       constant, the difference is ~0 BY DESIGN — the two metrics
+//       agree at the anchor (FS reference reads its dBFS level in both
+//       scales). Asserting that agreement catches any systematic
+//       offset in either metric.
 //
 // Method: the TESTS construct the meter with the exact training-window
 // length (3.0 s at 48 kHz) and feed synthetic buffers in one call each.
@@ -95,10 +98,14 @@ TEST_CASE("loudness: window slides with content (B3)", "[loudness]") {
   REQUIRE(s.db_rms == Catch::Approx(-3.01).margin(0.05));
 }
 
-TEST_CASE("loudness: metric pairing at the anchor (B4)", "[loudness]") {
+TEST_CASE("loudness: metric cross-tie at the anchor (B4)", "[loudness]") {
   const LoudnessSnapshot s = steady_reference();
-  // db_rms - lufs: the K-weighting's gain at the anchor (+0.691 dB),
-  // which the LUFS formula's -0.691 constant cancels. Corrected wording
-  // per owner review (the code was right; the comment had it backwards).
-  REQUIRE(s.db_rms - s.lufs == Catch::Approx(0.691).margin(0.1));
+  // Second spec correction (green prep, caught during derivation):
+  // lufs - db_rms = -0.691 + 20*log10(chain_gain(f)). At the anchor
+  // tone the chain gain is +0.691 dB, so the -0.691 constant cancels
+  // it and BOTH METRICS AGREE within numerical noise — that agreement
+  // is the calibration itself (FS reference reads its dBFS level in
+  // both scales). Asserting a +0.69 gap here would contradict the
+  // calibration the whole meter depends on.
+  REQUIRE(std::fabs(s.lufs - s.db_rms) <= 0.05);
 }
