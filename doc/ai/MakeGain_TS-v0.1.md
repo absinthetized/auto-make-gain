@@ -1,5 +1,8 @@
 # MakeGain — Technical Specification
 
+> **Audience: AI/owner process material.** Technical spec + decision log +
+> working backlog. Humans: start at the README's docs map → `doc/human/`.
+
 > Version: v0.1 — 2026-10-17
 > Source of truth: [../human/MakeGain_FR-v1.md](../human/MakeGain_FR-v1.md) (frozen)
 > Convention: each section maps to the FR it implements. Items marked

@@ -6,8 +6,8 @@ requirements, rules decisions, runs every machine checkpoint and merges.
 
 **MakeGain** is a DAW plugin that keeps your processing chain's loudness
 steady: train it on the clean signal, then let it automatically compensate
-any gain change introduced by the plugins in front of it (FR
-FR details: [the frozen FR contract](doc/human/MakeGain_FR-v1.md)).
+any gain change introduced by the plugins in front of it
+(behavioral contract: [the frozen FR](doc/human/MakeGain_FR-v1.md)).
 
 - Framework: **JUCE** (C++), formats VST3 + CLAP + AU
   (see [the tech spec](doc/ai/MakeGain_TS-v0.1.md) for the decision record)
@@ -21,11 +21,19 @@ the native **arm64** lane, `--x64` for the Rosetta-emulated **amd64**
 lane (details: [`doc/human/build.md` §8](doc/human/build.md)). DSP code is JUCE-free
 and unit-tested separately from the framework on both arches.
 
-## Docs
-- **New here / never used JUCE?** Start with [`doc/human/code-tour.md`](doc/human/code-tour.md) — where the entry point is and how the pieces move
-- **Fresh machine?** `./scripts/bootstrap.sh` — checks/installs the build toolchain (details: [`doc/human/build.md`](doc/human/build.md); dependencies of record = that script + `build.md` §7)
-- [Functional requirements](doc/human/MakeGain_FR-v1.md) — frozen contract (v1)
-- [Technical specification](doc/ai/MakeGain_TS-v0.1.md) — draft v0.1, veto items in §9
-- [Release model](doc/ai/release-model.md) — versions, tags (owner cuts them), CHANGELOG rules
-- [Changelog](CHANGELOG.md) — one section per tag
+## Where to go (docs map)
+
+The docs are split by audience: `doc/human/` for people building or
+reading the plugin, `doc/ai/` for the agent/owner process material
+(plans, decision records, release rules).
+
+| I want to… | Go to |
+|---|---|
+| **build it** on a fresh machine | [`doc/human/build.md`](doc/human/build.md) |
+| **understand the code** (new to JUCE?) | [`doc/human/code-tour.md`](doc/human/code-tour.md) |
+| **know what it does** — the behavioral contract | [`doc/human/MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md) |
+| **know why it's built this way** — decisions & spec | [`doc/ai/MakeGain_TS-v0.1.md`](doc/ai/MakeGain_TS-v0.1.md) |
+| release / tags / CHANGELOG rules | [`doc/ai/release-model.md`](doc/ai/release-model.md) |
+| work on it **as an AI agent** | [`AGENTS.md`](AGENTS.md) (root — tooling convention) |
+| see **what changed** per release | [`CHANGELOG.md`](CHANGELOG.md) |
 

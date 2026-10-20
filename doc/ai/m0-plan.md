@@ -1,5 +1,8 @@
 # M0 Implementation Plan — "walking skeleton"
 
+> **Audience: AI/owner process material** — closed milestone ledger
+> (checkpoint record). Humans: start at the README's docs map.
+
 > v1 — 2026-10-17. Commit policy per `AGENTS.md`: commit breakdown agreed
 > *before* coding; each checkpoint is a moment the owner acts (manual test
 > ✅ or review), then we proceed to the next commit.

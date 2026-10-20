@@ -1,5 +1,8 @@
 # Release & branching model
 
+> **Audience: AI/owner process material** — collaboration rules (who may
+> commit, push, tag, merge). Humans cutting releases: this is the how.
+
 > Owner-ratified 2026-10-17 (in force from the commit that introduces this
 > file — see AGENTS.md §5). Supersedes the m0-plan's placeholder "tag m0".
 
