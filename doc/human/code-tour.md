@@ -3,8 +3,8 @@
 > Goal: a musician-programmer who knows C++ but has never seen JUCE (or any
 > plugin format) should be able to read this repo and know where things
 > happen, *without* prior framework knowledge. Maintained per AGENTS.md
-> rule 7 — kept current **at milestone merges** (cadence relaxed by the
-> owner 2026-10-19; per-PR currency proved unsustainable). Last updated:
+> rule 7 — kept current **at milestone merges** (see `doc/ai/decisions.md`).
+> Last updated:
 > 2026-10-19 (M1 PR-A + x64 lane merged).
 
 ## The one shock: **there is no `main()`**
@@ -41,7 +41,7 @@ the *same* compiled processor — that's the whole multi-format payoff.
 | `src/ui/MakeGainEditor.h/.cpp` | The window. UI thread; disposable; talks to the processor via thread-safe channels (parameters come with PR-B). Bottom label doubles as a build-state check: it names what the loaded binary actually contains. |
 | `src/dsp/` | The JUCE-free DSP layer (**landed in PR-A, not yet wired**): `k_weighting.{h,cpp}` — the ITU BS.1770 K-weighting cascade as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — the dual-metric rolling window (short-term LUFS + unweighted dB RMS off the same 100 ms sub-block ring). Pure C++17, no framework types, double-precision internals. |
 | `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness. Wired from `CMakeLists.txt` (`makegain_tests`). |
-| `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit, see `d8c740b`). |
+| `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. |
 | `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 8): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
 | `docker/fedora-dev.Dockerfile` | The pinned fedora:44 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |

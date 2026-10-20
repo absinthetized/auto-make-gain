@@ -35,5 +35,6 @@ reading the plugin, `doc/ai/` for the agent/owner process material
 | **know why it's built this way** — decisions & spec | [`doc/ai/MakeGain_TS-v0.1.md`](doc/ai/MakeGain_TS-v0.1.md) |
 | release / tags / CHANGELOG rules | [`doc/ai/release-model.md`](doc/ai/release-model.md) |
 | work on it **as an AI agent** | [`AGENTS.md`](AGENTS.md) (root — tooling convention) |
+| **know every ruling to date** (owner decisions register) | [`doc/ai/decisions.md`](doc/ai/decisions.md) |
 | see **what changed** per release | [`CHANGELOG.md`](CHANGELOG.md) |
 

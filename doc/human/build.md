@@ -162,14 +162,14 @@ Release packaging with proper signing/notarization is a post-M0 milestone
 Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are
 deliberate, not incidental (AGENTS.md policy).
 
-**Dependencies of record** (owner, 2026-10-19): this section +
+**Dependencies of record** (see `doc/ai/decisions.md`, 2026-10-19): this section +
 `scripts/bootstrap.sh` (the executable source for *development package*
 lists, incl. the sanitizer runtimes the sanitize lane links against).
 The Linux header-map authority is JUCE's official
 [`docs/Linux Dependencies.md`](https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md)
 (external to this repo; comments elsewhere citing it by name mean that
 upstream file, never a repo-local one). No separate in-repo
-`dependencies.md` will be maintained — see the lean-ceremony ruling.
+`dependencies.md` will be maintained — see the decision register.
 
 ## 8. Linux compile/test inner loop on the Mac (Docker)
 
@@ -225,7 +225,7 @@ cp -R build/linux-arm64/MakeGain_artefacts/Release/VST3 \
 # on Asahi: hosts auto-scan ~/.vst3 and ~/.clap
 ```
 
-Caveats that keep this honest (ruling 2026-10-18):
+Caveats that keep this honest:
 
 1. **One-time compatibility guard:** compare `gcc --version` container vs.
    Asahi before trusting a transfer. If the Asahi install is an *older*
@@ -249,7 +249,7 @@ The `linux-x64` / `linux-x64-sanitize` CMake presets exist, but no native
 amd64 machine is part of the validation matrix (FR scope is arm64-first).
 To still exercise the DSP tests against genuinely different codegen +
 libm — the arch-invariance question — `scripts/docker-check.sh` accepts
-`--x64` (decision recorded in `doc/ai/m1-plan.md`, 2026-10-18):
+`--x64` (decision register: `doc/ai/decisions.md`, 2026-10-18):
 
 ```sh
 scripts/docker-check.sh --x64
