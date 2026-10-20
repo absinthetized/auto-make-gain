@@ -109,3 +109,29 @@ TEST_CASE("loudness: metric cross-tie at the anchor (B4)", "[loudness]") {
   // calibration the whole meter depends on.
   REQUIRE(std::fabs(s.lufs - s.db_rms) <= 0.05);
 }
+
+TEST_CASE("loudness: snapshot at an exact node boundary stays valid (B5)",
+          "[loudness]") {
+  // Every sub-block closes EXACTLY at snapshot time — the stream is fed
+  // precisely in 100 ms node multiples, 2 windows' worth. The ring walk
+  // must still find the full history behind the freshly-emptied open
+  // slot. (PR-A's feed helper truncates the last block by integer
+  // division, so every PR-A snapshot sampled a PARTIAL open node — this
+  // exact-boundary case never ran until the gain machine's aligned
+  // slot feeds exposed it.)
+  LoudnessMeter m(kRate, kWindow);
+  std::vector<float> chunk(4800);  // exactly one 100 ms node at 48 kHz
+  for (std::size_t k = 0; k < 32; ++k) {
+    for (std::size_t i = 0; i < chunk.size(); ++i) {
+      const std::size_t idx = k * chunk.size() + i;
+      chunk[i] = static_cast<float>(
+          std::sin(2.0 * kPi * 997.0 * static_cast<double>(idx) / kRate));
+    }
+    m.process(chunk.data(), chunk.size());
+    m.process(chunk.data(), 0);  // zero-length calls are legal; exercise them
+  }
+  const LoudnessSnapshot s = m.snapshot();
+  REQUIRE(s.valid);
+  REQUIRE(s.lufs == Catch::Approx(-3.0).margin(0.2));
+  REQUIRE(s.db_rms == Catch::Approx(-3.01).margin(0.05));
+}
