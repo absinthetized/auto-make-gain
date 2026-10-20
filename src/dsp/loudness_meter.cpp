@@ -71,6 +71,16 @@ LoudnessSnapshot LoudnessMeter::snapshot() const {
   double sum_w = 0.0, sum_r = 0.0;
   uint64_t taken = 0;
   std::size_t idx = ring_next_;
+  if (ring_[idx].count == 0) {
+    // The stream can land EXACTLY on a slot boundary (any host feeding
+    // exact 100 ms multiples does; the gain machine's slot-aligned
+    // captures always do). The currently-open node is then legitimately
+    // empty while fully-accumulated history sits behind it — that is
+    // NOT "ring not yet full". Step one slot older and walk from
+    // there; a still-empty node later remains a genuine not-full state
+    // (nothing has been fed into that part of the ring yet).
+    idx = (idx + ring_.size() - 1) % ring_.size();
+  }
   for (std::size_t visited = 0;
        visited < ring_.size() && taken < window_samples_;
        ++visited) {
