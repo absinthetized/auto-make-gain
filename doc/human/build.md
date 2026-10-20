@@ -249,7 +249,7 @@ The `linux-x64` / `linux-x64-sanitize` CMake presets exist, but no native
 amd64 machine is part of the validation matrix (FR scope is arm64-first).
 To still exercise the DSP tests against genuinely different codegen +
 libm — the arch-invariance question — `scripts/docker-check.sh` accepts
-`--x64` (decision recorded in `docs/m1-plan.md`, 2026-10-18):
+`--x64` (decision recorded in `doc/ai/m1-plan.md`, 2026-10-18):
 
 ```sh
 scripts/docker-check.sh --x64

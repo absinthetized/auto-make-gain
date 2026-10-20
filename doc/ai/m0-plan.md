@@ -6,7 +6,7 @@
 
 ## Goal (M0 exit, from FR-18/TS §6)
 
-A `git clone` of this repo, after following `docs/build.md` *and only that*,
+A `git clone` of this repo, after following `doc/human/build.md` *and only that*,
 produces a building `MakeGain` in all three formats on macOS arm64 —
 loadable in Reaper — and, on Fedora Asahi aarch64, a container-verified
 build/test lane (fedora:44 gcc 16.2.1, version-guard-matched to the
@@ -53,7 +53,7 @@ Pins (record, to be set precisely at commit 2):
 | C3 | `plugin: passthrough stub + editor shell (VST3)` | `src/plugin/makegain_processor.{h,cpp}` (silence-preserves passthrough, no params yet), `src/ui/editor.{h,cpp}` (empty window), VST3 target | ✓ mac build: `MakeGain.vst3` produced + auto-installed (2026-10-17) |
 | C4 | `plugin: CLAP + AU format targets` | clap-juce-extensions target, AU target (mac only) | ✅ **owner PASSED 2026-10-17**: all three formats load in Reaper (flawless) |
 | C5 | `tests: Catch2 wiring + sanitizer presets` | `tests/dsp/*` (one placeholder test that the empty framework passes), `scripts/check-all.sh` (builds all presets + runs ctest; the local stand-in for CI) | ✓ mac: ALL GREEN (default + ASan/UBSan lane) · Fedora: ✅ both lanes green in container + ctest pass on host (2026-10-18) |
-| C6 | `docs: developer build guide (macOS / Fedora Asahi)` | `docs/build.md`: exact OS-by-OS commands, first-run JUCE download notes, ad-hoc mac code-sign/Gatekeeper notes, "load in Reaper/Ardour" quick test, troubleshooting section (doc-only skeleton at first, grown from C1–C5 friction) | ✅ fresh `git clone` in a new dir → follow doc → Reaper accepts the plugin, with zero knowledge beyond the doc |
+| C6 | `docs: developer build guide (macOS / Fedora Asahi)` | `doc/human/build.md`: exact OS-by-OS commands, first-run JUCE download notes, ad-hoc mac code-sign/Gatekeeper notes, "load in Reaper/Ardour" quick test, troubleshooting section (doc-only skeleton at first, grown from C1–C5 friction) | ✅ fresh `git clone` in a new dir → follow doc → Reaper accepts the plugin, with zero knowledge beyond the doc |
 | C7 | `milestone: v0.1.0` (renamed 2026-10-17, see release-model.md) | CHANGELOG.md execution + release notes; **re-scoped per owner 2026-10-18**: tag gate moved from "Asahi host verification" to "owner's disposition post-merge (macOS-validated release notes mandatory); Linux validation = next branch (m0-linux-inner-loop) + native Asahi session" | ✅ owner approves the tag itself |
 
 ## Explicit non-goals of M0

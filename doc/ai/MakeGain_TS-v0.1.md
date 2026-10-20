@@ -1,7 +1,7 @@
 # MakeGain — Technical Specification
 
 > Version: v0.1 — 2026-10-17
-> Source of truth: [../functional_reqs/MakeGain_FR-v1.md](../functional_reqs/MakeGain_FR-v1.md) (frozen)
+> Source of truth: [../human/MakeGain_FR-v1.md](../human/MakeGain_FR-v1.md) (frozen)
 > Convention: each section maps to the FR it implements. Items marked
 > **[assumed]** are tech decisions made by the assistant pending owner veto.
 
@@ -245,7 +245,7 @@ src/
 ## 11. Resolved backlog items
 
 - **Release & branching model** — resolved 2026-10-17; ratified text in
-  [../docs/release-model.md](../docs/release-model.md) (introduced by the
+  [release-model.md](release-model.md) (introduced by the
   first model-exercise PR). Key rulings: work-unit = branch = PR
   (milestone = largest PR); semver tags only — `v0.1.0` = M0 post-Asahi,
   `v1.0.0` triggers on completing the full frozen FR contract; no GitHub

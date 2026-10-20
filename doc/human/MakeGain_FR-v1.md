@@ -5,7 +5,7 @@
 > Working name: **MakeGain** · repo: `auto-make-gain`
 >
 > This document captures *what the plugin must do*, not *how*. Tech specs live
-> in `../tech_specs/` and will be written against these FRs once frozen.
+> in `../ai/` and will be written against these FRs once frozen.
 
 ---
 

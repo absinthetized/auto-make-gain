@@ -1,6 +1,6 @@
 # Changelog — MakeGain
 
-One section per tag (`docs/release-model.md`). Entries are written at
+One section per tag (`doc/ai/release-model.md`). Entries are written at
 tag time by the owner; sections below are prepared in advance and frozen
 at the tag commit.
 

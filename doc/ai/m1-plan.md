@@ -1,7 +1,7 @@
 # M1 plan — "the kernel earns its meters"
 
-Status: proposed 2026-10-18. Frozen FR contract: `functional_reqs/FR-v1.md`.
-Architectural rules: `tech_specs/TS-v0.1.md` §7 (`src/dsp/` JUCE-free; plain
+Status: proposed 2026-10-18. Frozen FR contract: `doc/human/MakeGain_FR-v1.md`.
+Architectural rules: `doc/ai/MakeGain_TS-v0.1.md` §7 (`src/dsp/` JUCE-free; plain
 float path first; no hand-written SIMD; latency-neutral plugin).
 
 ## Goal (M1 exit)
