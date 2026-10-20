@@ -3,7 +3,9 @@
 > Goal: a musician-programmer who knows C++ but has never seen JUCE (or any
 > plugin format) should be able to read this repo and know where things
 > happen, *without* prior framework knowledge. Maintained per AGENTS.md
-> rule 6 — it must stay current with the file map. Last updated: 2026-10-17 (M0).
+> rule 7 — kept current **at milestone merges** (see `doc/ai/decisions.md`).
+> Last updated:
+> 2026-10-19 (M1 PR-A + x64 lane merged).
 
 ## The one shock: **there is no `main()`**
 
@@ -31,15 +33,18 @@ host (Reaper) ──loads──▶ VST3/CLAP/AU wrapper (JUCE-generated)
 The build system (`juce_add_plugin`) produces one bundle per format from
 the *same* compiled processor — that's the whole multi-format payoff.
 
-## File map (M0)
+## File map (M1, PR-A + x64 lane)
 
 | Path | Role |
 |---|---|
-| `src/plugin/MakeGainProcessor.h/.cpp` | The DSP brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Lifecycle contract documented at the top of the `.h`. This is where the loudness/gain DSP will live (M1+). |
-| `src/ui/MakeGainEditor.h/.cpp` | The window. UI thread; disposable; talks to the processor via thread-safe channels (none wired yet — parameters come with M1). |
-| `tests/dsp/` | JUCE-free unit tests (originally nonexistent here, now the project's lab), run under ASan/UBSan via `scripts/check-all.sh`. |
-| `scripts/bootstrap.sh` | Fresh-machine toolchain setup. |
+| `src/plugin/MakeGainProcessor.h/.cpp` | The audio-thread brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Lifecycle contract documented at the top of the `.h`. Still passthrough — the dsp layer below exists and is tested but is **not wired** yet (wiring = M1 PR-B). |
+| `src/ui/MakeGainEditor.h/.cpp` | The window. UI thread; disposable; talks to the processor via thread-safe channels (parameters come with PR-B). Bottom label doubles as a build-state check: it names what the loaded binary actually contains. |
+| `src/dsp/` | The JUCE-free DSP layer (**landed in PR-A, not yet wired**): `k_weighting.{h,cpp}` — the ITU BS.1770 K-weighting cascade as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — the dual-metric rolling window (short-term LUFS + unweighted dB RMS off the same 100 ms sub-block ring). Pure C++17, no framework types, double-precision internals. |
+| `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness. Wired from `CMakeLists.txt` (`makegain_tests`). |
+| `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. |
+| `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 8): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
+| `docker/fedora-dev.Dockerfile` | The pinned fedora:44 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |
 | `cmake/deps-pins.cmake` | The pinned third-party versions (JUCE, clap-juce-extensions, Catch2). |
 
 ## How the build folds together (CMakeLists.txt orientation)
@@ -53,12 +58,15 @@ layers the CLAP wrapper over the same code (JUCE has no native CLAP).
 `COPY_PLUGIN_AFTER_BUILD` drops fresh bundles into your user's plug-in
 folders so Reaper sees new builds without manual copying.
 
-## Where the M0 stub plugs the future in
+## Where the DSP plugs in next (status after PR-A)
 
-The FR contract's DSP (K-weighting, LUFS/RMS, gain computer — TS §3) enters
-as a *new* `src/dsp/` layer that is deliberately **JUCE-free**: pure C++
-that the processor calls each block, which is what makes it unit-testable
-without a DAW. The test-first workflow for M1 lives in the tech spec §7.
+The `src/dsp/` layer now exists and carries the FR contract's
+measurement half (K-weighting, LUFS/RMS metering — TS §3), unit-tested
+green on macOS arm64, Linux arm64 (native) and Linux amd64 (Rosetta —
+incl. sanitizers). The *wiring* is the remaining M1 half (PR-B): the
+processor will instantiate the meter, tap the blocks, run the gain
+computer, and publish meters to the editor. Until that lands the signal
+path is honest passthrough — which the editor's status label states.
 
 ## Going deeper (official docs)
 

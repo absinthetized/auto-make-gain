@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MakeGain developer bootstrap — the only entrypoint a fresh machine needs.
 #
-# What it does (per docs/m0-plan.md C1):
+# What it does (per doc/ai/m0-plan.md C1):
 #   - checks the C/C++ toolchain needed to build MakeGain
 #   - macOS: offers to trigger the Xcode CLT installer; downloads official
 #     cmake/ninja binaries into ~/.local/bin if Homebrew is absent/unused

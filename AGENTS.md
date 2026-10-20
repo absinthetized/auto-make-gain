@@ -7,6 +7,9 @@ Binding for any AI/agent working in this repository:
    implied).
 2. **Never push.** `git push` is prohibited for agents. Pulling / fetching /
    diffing against remote is explicitly encouraged at the start of a session.
+   **Tags are the owner's ceremony** (owner, 2026-10-19): agents never
+   create, move or push tags — not even locally; they prepare the
+   release-notes material (`CHANGELOG.md`) for the owner's cut.
 3. Working language: keep user-facing replies in English; doc files follow
    repo convention (English).
 4. **Commit policy** (owner, 2026-10-17):
@@ -33,14 +36,14 @@ Binding for any AI/agent working in this repository:
      these metrics presume the commit size/atomicity above unchanged (they
      are the base unit; the PR sizing builds on top of it).
 5. **Session resume:** first read `README.md`, then
-   `functional_reqs/MakeGain_FR-v1.md` (frozen contract), then
-   `tech_specs/MakeGain_TS-v0.1.md` + its decision log (§9) and session
+   `doc/human/MakeGain_FR-v1.md` (frozen contract), then
+   `doc/ai/MakeGain_TS-v0.1.md` + its decision log (§9) and session
    backlog (§10). FRs are frozen: changes go through the owner, not silently.
 6. **Release & branching model (owner, 2026-10-17):** from the commit that
-   introduces `docs/release-model.md` onward, agents never work on `main`
+   introduces `doc/ai/release-model.md` onward, agents never work on `main`
    directly — a unit of work lands on a branch, the owner pushes the
    branch, opens and merges the PR. Agents never push or merge (rule 2
-   above stays absolute). Details: `docs/release-model.md`.
+   above stays absolute). Details: `doc/ai/release-model.md`.
 7. **Comment standard (owner, 2026-10-17):** code must carry enough
    comments for a reader with **limited framework knowledge** (decent C++
    but *not* JUCE) to follow the process. Concretely, in addition to
@@ -48,15 +51,17 @@ Binding for any AI/agent working in this repository:
    - every non-obvious framework call indirection gets a short
      "what this means in framework terms" note at the call site;
    - entry-point chain (no `main()` in plugins!) is documented in-place
-     *and* in `docs/code-tour.md`;
+     *and* in `doc/human/code-tour.md`;
    - build-side magic (juce_add_plugin metadata, format targets) is
      annotated in `CMakeLists.txt`;
    - lifecycle contracts (which thread, what a callback may not do) are
      stated where the override appears — not assumed known;
    - no comment narrating trivia; no comment that will rot with the next
      refactor without maintenance.
-   - `docs/code-tour.md` is kept current whenever the file map or the
-     entry-point chain changes.
+   - `doc/human/code-tour.md` is kept current **at milestone merges**
+     (cadence relaxed per owner, 2026-10-19 — per-PR currency proved
+     unsustainable): at a milestone's merge the file map and the
+     entry-point chain must not be stale.
 8. **Red/green testing discipline (owner, 2026-10-18):** no
    implementation may exist before its tests. Every test-covered unit
    lands in two commits: a **RED** commit (tests + an honest stub that

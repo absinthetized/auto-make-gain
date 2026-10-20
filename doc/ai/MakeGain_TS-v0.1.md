@@ -1,7 +1,11 @@
 # MakeGain — Technical Specification
 
-> Version: v0.1 — 2026-10-17
-> Source of truth: [../functional_reqs/MakeGain_FR-v1.md](../functional_reqs/MakeGain_FR-v1.md) (frozen)
+> **Audience: AI/owner process material.** Technical spec + decision log +
+> working backlog. Humans: start at the README's docs map → `doc/human/`.
+
+> Version: v0.1 — 2026-10-17; structure fixed 2026-10-20 (stray decision
+> subsections folded into §9/§11; no spec content changed).
+> Source of truth: [../human/MakeGain_FR-v1.md](../human/MakeGain_FR-v1.md) (frozen)
 > Convention: each section maps to the FR it implements. Items marked
 > **[assumed]** are tech decisions made by the assistant pending owner veto.
 
@@ -113,29 +117,11 @@ gain ← slew(targetGain)                            // FR-3 ramp
 - Reference record serialized as extra APVTS state (binary block). Loading a
   session restores full mode + references.
 
-### 1.1 Framework decision record (why JUCE — alternatives checked)
-
-| Candidate | Formats | macOS arm64 | Linux aarch64 | UI toolkit | Licence | Verdict |
-|---|---|---|---|---|---|---|
-| **JUCE 8** | VST3, CLAP (via clap-juce-extensions), AU (v2/v3), AAX, LV2, standalone | mature | mature | full component system, resizable | AGPLv3 / GPLv3 / commercial | **Selected** |
-| DPF (DISTRHO) | LADSPA, LV2, VST2, VST3, CLAP, JACK standalone | buildable | excellent (its home turf) | modest, smaller widget set | LGPL | Rejected: **no AU target** → fails GarageBand exercise (FR-16) |
-| iPlug2 | VST2/3, AU, AUv3, AAX, CLAP, WebAssembly | works | exists, less battle-tested | decent | permissive (WDL/IPL-style) | Strong runner-up; rejected for this project: smaller community proof on Linux arm64 plugin hosting, and permissive licence buys us nothing since owner *prefers* copyleft |
-| Raw CLAP SDK only (+ hand UI) | CLAP only | yes | yes | you write it | MIT | Rejected: AU + VST3两手 reinvention for a solo project |
-| LV2-first | LV2 only | n/a (mac hosts don't speak it) | yes | n/a | — | Rejected: fails macOS |
-
-Decision axes (from the FRs): AU must exist (exercise tier, FR-16) → only
-JUCE and iPlug2 remain → owner prefers FSF-copyleft and JUCE's AGPLv3 route
-matches that → JUCE. The one JUCE cost (copyleft propagation) is a feature
-per owner's stated preference.
-
-**C++ standard note (veto-item 1 resolved):** JUCE 8's official minimum is
-C++17. C++20 is a compatible superset we compile with; nothing in JUCE
-blocks it. Rule: features we use must stay within "compiles under both
-C++17 and C++20"; any C++20-only construct needs a code comment. Confirmed
-not to depend on JUCE internals that differ between standards.
-
 ## 4. Plugin architecture
 
+> Structural note (2026-10-20): the tree below is the *design-time* sketch
+> (spec-file names, e.g. `kweighting.c`); the actual file set evolved —
+> `doc/human/code-tour.md` is the file map of record.
 
 ```
 src/
@@ -216,7 +202,7 @@ src/
 ## 9. Decision log (veto items status)
 
 1. **C++ standard** — resolved: compile as C++20 with C++17-compatible
-   features only (JUCE 8 baseline is C++17; see §1.1).
+   features only (JUCE 8 baseline is C++17; see 9.6's C++-standard note).
 2. **AGPLv3** — **approved by owner** (FSF-copyleft preference).
 3. **Rephrased:** two tunable numeric defaults live in the gain computer:
    ① *silence-hold timer* = how long the output must stay silent before the
@@ -233,26 +219,47 @@ src/
    layers. The concrete form (pure-dsp vs JUCE-free, language features,
    arch guards) gets finalized when §1's language decision is closed.
 
+### 9.6 Framework decision record (why JUCE — alternatives checked)
+
+| Candidate | Formats | macOS arm64 | Linux aarch64 | UI toolkit | Licence | Verdict |
+|---|---|---|---|---|---|---|
+| **JUCE 8** | VST3, CLAP (via clap-juce-extensions), AU (v2/v3), AAX, LV2, standalone | mature | mature | full component system, resizable | AGPLv3 / GPLv3 / commercial | **Selected** |
+| DPF (DISTRHO) | LADSPA, LV2, VST2, VST3, CLAP, JACK standalone | buildable | excellent (its home turf) | modest, smaller widget set | LGPL | Rejected: **no AU target** → fails GarageBand exercise (FR-16) |
+| iPlug2 | VST2/3, AU, AUv3, AAX, CLAP, WebAssembly | works | exists, less battle-tested | decent | permissive (WDL/IPL-style) | Strong runner-up; rejected for this project: smaller community proof on Linux arm64 plugin hosting, and permissive licence buys us nothing since owner *prefers* copyleft |
+| Raw CLAP SDK only (+ hand UI) | CLAP only | yes | yes | you write it | MIT | Rejected: reinventing AU + VST3 support by hand for a solo project |
+| LV2-first | LV2 only | n/a (mac hosts don't speak it) | yes | n/a | — | Rejected: fails macOS |
+
+Decision axes (from the FRs): AU must exist (exercise tier, FR-16) → only
+JUCE and iPlug2 remain → owner prefers FSF-copyleft and JUCE's AGPLv3 route
+matches that → JUCE. The one JUCE cost (copyleft propagation) is a feature
+per owner's stated preference.
+
+**C++ standard note (veto-item 1 resolved):** JUCE 8's official minimum is
+C++17. C++20 is a compatible superset we compile with; nothing in JUCE
+blocks it. Rule: features we use must stay within "compiles under both
+C++17 and C++20"; any C++20-only construct needs a code comment. Confirmed
+not to depend on JUCE internals that differ between standards.
+
 ## 10. Session backlog (this project's live backlog)
 
-- **Release & branching model** — not yet discussed: branching strategy,
-  tags (semver?), release cadence, `main` protections, version string
-  surfaced in the plugin UI/about.
 - Installers / packaging (bumped from v0 scope, FR-18).
 - Noise/silence gate *skipping* in computation (deferred idea, FR doc §9).
 - CI enablement (deferred from v0 by FR-18; presets first).
+- Host-coverage gaps being worked at milestone level: AU exercise
+  (GarageBand), Ardour+CLAP detection (build guide §6.10) — tracked in
+  `doc/ai/m1-plan.md` exit gates, not duplicated here.
 
 ## 11. Resolved backlog items
 
 - **Release & branching model** — resolved 2026-10-17; ratified text in
-  [../docs/release-model.md](../docs/release-model.md) (introduced by the
+  [release-model.md](release-model.md) (introduced by the
   first model-exercise PR). Key rulings: work-unit = branch = PR
   (milestone = largest PR); semver tags only — `v0.1.0` = M0 post-Asahi,
   `v1.0.0` triggers on completing the full frozen FR contract; no GitHub
   Releases before v1.0.0; CHANGELOG.md born at `v0.1.0`; `main` protected
   with PRs required, owner-exempt force-push; agents never push or merge.
 
-### Decision log — language vote, closed 2026-10-17
+### 11.1 Decision log — language vote, closed 2026-10-17
 - **Path A confirmed by owner**: pure C++20 + JUCE for v1.
 - Rejected: **Path B** (JUCE C++ shell + Rust DSP core via `cxx` — two
   toolchains, FFI surface disproportionate to our small DSP scope), and

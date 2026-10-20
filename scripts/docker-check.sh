@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/docker-check.sh — Tier-1 Linux build/test lane (docs/build.md §8).
+# scripts/docker-check.sh — Tier-1 Linux build/test lane (doc/human/build.md §8).
 #
 # Constraint (AGENTS.md rule 8): container runs happen ONLY through this
 # script — never by calling `docker` directly. The role split is:
@@ -13,7 +13,7 @@
 # Usage:
 #   scripts/docker-check.sh          # native arm64 lane (default)
 #   scripts/docker-check.sh --x64    # amd64 lane, Rosetta-emulated on the
-#                                    # Apple Silicon mac (docs/build.md §8.2)
+#                                    # Apple Silicon mac (doc/human/build.md §8.2)
 #
 # Idempotent: `docker build` below is layer-cached — after the first
 # provisioning run it costs ~1 second unless scripts/bootstrap.sh changed.

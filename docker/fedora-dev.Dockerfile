@@ -1,4 +1,4 @@
-# docker/fedora-dev.Dockerfile — Tier-1 Linux lane image (docs/build.md §8).
+# docker/fedora-dev.Dockerfile — Tier-1 Linux lane image (doc/human/build.md §8).
 #
 # Purpose: reproduce the exact Fedora compile/test environment that
 # scripts/bootstrap.sh provisions on a real Fedora Asahi machine, inside an

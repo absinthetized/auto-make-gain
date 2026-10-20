@@ -14,15 +14,15 @@ should be patched in the next related PR.
 
 ## Session start
 
-1. Read `README.md`, `functional_reqs/MakeGain_FR-v1.md` (frozen FR
-   contract), then `tech_specs/MakeGain_TS-v0.1.md` including its decision
+1. Read `README.md`, `doc/human/MakeGain_FR-v1.md` (frozen FR
+   contract), then `doc/ai/MakeGain_TS-v0.1.md` including its decision
    log (§9) and backlog (§10).
 2. `git fetch` / pull and diff against `origin` before doing anything else.
 
 ## Absolute rules
 
 - Never `git push` (any branch, any remote). Pushing, PR opening and
-  merging belong to the human owner — see `docs/release-model.md`.
+  merging belong to the human owner — see `doc/ai/release-model.md`.
 - Never `git commit` without an explicit owner order.
 - Never work directly on `main`: units of work go on a branch
   (`mN[-descriptor]`, `fix-*`) and land via owner's PR.
@@ -57,5 +57,5 @@ should be patched in the next related PR.
 Code must be followable by a C++ reader who does not know JUCE:
 framework indirections and lifecycle/thread contracts explained at the
 call site; the no-main() entry-point chain documented in-place and in
-`docs/code-tour.md`; build-side CMake magic annotated in
-CMakeLists.txt; keep `docs/code-tour.md` current with structural changes.
+`doc/human/code-tour.md`; build-side CMake magic annotated in
+CMakeLists.txt; keep `doc/human/code-tour.md` current with structural changes.
