@@ -69,10 +69,16 @@ struct ReferenceRecord {
 
 // Flags the UI shows (FR-12): clamped is live while ADJUSTing (last
 // computed target exceeded the clamp); low_confidence sticks for the
-// current reference (captured from a silent window — re-read to fix).
+// current reference (captured from a silent window — re-read to fix);
+// no_signal lights on sustained wall-side silence.
 struct GainFlags {
   bool clamped = false;
   bool low_confidence = false;
+  // FR-12/UX-Q3: "no signal" — the input wall went (near-)digitally
+  // silent and STAYED silent for the full 5.0 s code-constant grace
+  // (TS §9 ③). The machine freezes its chase on the FIRST silent slot;
+  // the flag timing is purely the UI-facing surface.
+  bool no_signal = false;
 };
 
 class GainComputer {
@@ -127,6 +133,11 @@ class GainComputer {
   // Anything at or below this LUFS is treated as "the window is silence"
   // (drives silence-hold and the low-confidence flag).
   static constexpr double kSilenceLufs = -140.0;
+  // Wall-side silence: newest 100 ms mean square ≤ this ⇒ digitally
+  // silent input (≈ −120 dB FS). Drives the freeze (FR-9) and the
+  // no_signal streak (5.0 s = 50 slots, TS §9 ③).
+  static constexpr double kSilenceMeanSq = 1e-12;
+  static constexpr std::size_t kNoSignalSlots = 50;
 
  private:
   LoudnessMeter meter_;  // shared by READ capture and ADJUST measurement
@@ -143,6 +154,27 @@ class GainComputer {
 
   double applied_db_ = 0.0;  // the ramped applied gain
   double target_db_ = 0.0;   // what the ramp is currently chasing
+
+  // Implementation state (GREEN commit — private slots only; the public
+  // contract was already final at red): the cached one-pole α, the
+  // internal 100 ms evaluation-slot clock, and the training-run counter.
+  double alpha_ = 0.0;
+  std::uint64_t eval_slot_samples_ = 0;
+  std::uint64_t slot_fed_ = 0;
+  std::size_t run_slots_ = 0;
+
+  // Wall-side silence detection (FR-9): raw squares of the slot being
+  // fed, the verdict at each boundary, and the silence-slot streak.
+  double slot_sq_ = 0.0;
+  bool tail_silent_ = false;
+  std::size_t silent_streak_ = 0;
+
+  // Target evaluation, exactly once per 100 ms slot boundary.
+  void evaluate();
+  // Per-sample one-pole advance of the applied gain toward the target.
+  void advance_ramp(std::size_t count);
+  // Raw sample energy of a chunk (the wall-side silence detector).
+  static double slot_energy(const float* samples, std::size_t count);
 };
 
 }  // namespace makegain::dsp
