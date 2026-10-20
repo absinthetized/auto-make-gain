@@ -84,16 +84,52 @@ not wired) — one mac Reaper load-check confirms nothing regressed.
   where certainty was needed the spec cites analytic values verified
   against the standard's own Table 1 coefficients.
 
-### PR-B `m1-gain-compute-ui` — the compensate machine (~7 commits, ~6 files)
+### PR-B `m1-gain-compute-ui` — the compensate machine
 
-| # | Commit | Files |
-|---|---|---|
-| D1 | `tests(red): gain-computer behavior + stub` | `src/dsp/gain_computer.{h,cpp}` (stub), `tests/dsp/gain_computer_test.cpp` |
-| D2 | `dsp(green): gain computer (state machine, clamp, slew, silence-hold)` | same files |
-| D3 | `plugin: wire kernel + gain computer into processor (mono-sum)` | `src/plugin/MakeGainProcessor.{h,cpp}` |
-| D4 | `plugin: APVTS state + persistence (FR-7 reference survives reload)` | same files |
-| D5 | `ui: real meters + state labels (ref captured, clamped, no-signal, low-confidence)` | `src/ui/MakeGainEditor.{h,cpp}` |
-| D6 | `test: APVTS round-trip` | `tests/state_test.cpp` |
+**Commit-detail plan (drafted 2026-10-20, per AGENTS rule 4+8):**
+design intent first: the FSM, ramp, hold, clamp and the reference-codec
+live in a JUCE-free `GainComputer` (owns a `LoudnessMeter`), so the
+entire compensate machine is unit-testable headless; the processor
+becomes thin glue (buffers in, params in, buffered gain out); the codec
+inside the same module keeps the source-file metric at the ceiling.
+
+| # | Commit (rule 8 red/green where applies) | Files | Checkpoint (owner acts) |
+|---|---|---|---|
+| PB1a | `tests(red): gain-computer spec R1–R7 + codec round-trip + honest stub` | `src/dsp/gain_computer.{h,cpp}` (stub), `tests/dsp/gain_computer_test.cpp`, `CMakeLists.txt` | review the assertions; red output quoted in message |
+| PB1b | `dsp(green): gain computer — FSM (IDLE/READ/ADJUST), clamp, one-pole ramp, silence-hold, reference codec` | same 3 files | — |
+| PB2 | `plugin: wire GainComputer into processor — APVTS params, FR-7 persistence, mono-sum gain` | `src/plugin/MakeGainProcessor.{h,cpp}` | **mac Reaper mid-gate**: compensation audibly works, ramp is smooth, active-toggle + re-engage keep the reference (FR-5), session reload restores it (FR-7) |
+| PB3 | `ui: meters + mode controls + status line flips to real DSP` | `src/ui/MakeGainEditor.{h,cpp}` | mac Reaper visual check: all FR-12 readouts lie live (in/out loudness, applied gain, reference, mode, metric), clamped/low-confidence flags show |
+| PB4 | `docs: PR-B verification record + lane runs` | `doc/ai/m1-plan.md` | `docker-check.sh` (arm64) + `--x64` on this branch; then push/PR |
+
+Gain-computer spec sketch for PB1a (tests assert, owner reviews):
+
+- **R1** compensation math: `g_dB = ref[metric] − live[metric]`
+  (metric = LUFS or dB RMS; both pair selectable at any time).
+- **R2** clamp (FR-10): |g| > MaxComp → applied = ±MaxComp, `clamped`
+  flag exposed.
+- **R3** ramp: one-pole slew toward target with tc = ramp-speed param
+  (default 300 ms, TS §9 item ③): deterministic closed-form check over
+  N samples; no step larger than the slew bound; automation-safe.
+- **R4** silence-hold (FR-9/UX-Q3): invalid snapshot or sustained silence
+  → gain holds last applied value; state survives until a valid reading
+  returns, then chases again.
+- **R5** engage from IDLE (FR-5): starts at 0 dB and *ramps* to target —
+  no slam, no re-train; IDLE return clears applied gain ramped, too.
+- **R6** READ completes on its own after the 3.0 s code-constant window
+  (FR-2/FR-4): captures BOTH metrics (FR-6a), flips low-confidence flag
+  when the window was silent (FR-5a); re-read replaces reference at
+  completion, never mid-run.
+- **R7** reference codec round-trip (FR-7 substance, JUCE-free):
+  encode→decode = identity; tagged version field; unknown trailing data
+  is ignored, not fatal (forward compat).
+- Ragged block sizes (7/11/13) across all cases — same
+  accumulation-robustness pattern as PR-A.
+
+File-net for PR-B after merge (metric check ≤5–7 source): +
+`gain_computer.{h,cpp}`, + processor & editor touch-ups, `CMakeLists`
+edit → **7 non-test source files** exactly; param IDs stay in the
+processor header (no separate `parameters.{h,cpp}` at v1 — metric
+pressure decision); test files don't count (PR-A precedent).
 
 ### M1 exit gates (owner checkpoints, end of PR-B)
 
