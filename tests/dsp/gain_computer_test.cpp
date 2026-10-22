@@ -142,8 +142,16 @@ TEST_CASE("gain computer: program dynamics pass through (R-D2)") {
   const std::size_t n1 = seconds(3.0);
   const std::size_t n2 = seconds(1.0);
   const std::size_t n = n1 + n2;
-  const auto dry = sine_1k(0.0, n);
-  // wet = same program, level drops 6 dB at t = 3.0 s (mid-program).
+  // BOTH taps carry the level change (the program changed; the chain
+  // did not): the whole point of R-D2 is that such equal motion is NOT
+  // chased. (PB2e first-run lesson: an unchanged `dry` here would make
+  // it a REAL edit — a −6 dB delta — and the engine was right to chase.)
+  const auto dry = [&] {
+    std::vector<float> d = sine_1k(0.0, n1);
+    const auto tail = sine_1k(-6.0, n2);
+    d.insert(d.end(), tail.begin(), tail.end());
+    return d;
+  }();
   std::vector<float> wet = sine_1k(0.0, n1);
   const auto tail = sine_1k(-6.0, n2);
   wet.insert(wet.end(), tail.begin(), tail.end());
@@ -387,7 +395,10 @@ TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
 TEST_CASE("gain computer: chunk invariance of the emitted trajectory (R-D8)") {
   const std::size_t a = seconds(3.0);
   const std::size_t gap_n = seconds(0.5);
-  const std::size_t back_n = seconds(3.0);  // resume needs ramp room
+  // 4.0 s of resume: the first ~1 s the window still contains the tail
+  // of the silence burst, so the delta (and the target) transiently
+  // OVERSHOOTS; final assertion waits for that drain to settle out.
+  const std::size_t back_n = seconds(4.0);
   const std::size_t n = a + gap_n + back_n;
   std::vector<float> dry = sine_1k(0.0, n);
   std::vector<float> wet = sine_1k(-6.0, a);
