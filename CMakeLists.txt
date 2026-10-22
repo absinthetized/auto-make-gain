@@ -62,7 +62,15 @@ target_sources(MakeGain PRIVATE
   src/plugin/MakeGainProcessor.cpp
   src/plugin/MakeGainProcessor.h
   src/ui/MakeGainEditor.cpp
-  src/ui/MakeGainEditor.h)
+  src/ui/MakeGainEditor.h
+  # PR-B2 (PB2c): the processor now CALLS the gain machine, so the DSP
+  # compilation units join the plugin target (machine + the meter it
+  # owns). They stay JUCE-free (the test target still compiles them
+  # independently under sanitizers — the two targets sharing the same
+  # .cpp files is deliberate: one truth, two lanes).
+  src/dsp/gain_computer.cpp
+  src/dsp/loudness_meter.cpp
+  src/dsp/k_weighting.cpp)
 
 target_include_directories(MakeGain PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
