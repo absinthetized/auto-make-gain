@@ -270,3 +270,44 @@ not to depend on JUCE internals that differ between standards.
   owner-adopted memory-safety strategy (§7). Any future DSP growth that
   reopens the Rust question will cite this entry as recorded precedent.
 
+## 12. Amendment A2 — the delta engine (2026-10-22)
+
+Normative for M1 onward. Supersedes §3.2 (Read/Reference capture) and the
+reference half of §3.5; §3.3 is replaced by the internal-sidechain delta
+engine (FR §10 addendum, commits 7c4086d / 0d48009 and the green commit
+that follows). §3.1 (measurement kernel) and §3.4 (realtime discipline)
+stand unchanged. The old §3.2/§3.3 text stays above as frozen history.
+
+Implemented engine contract (src/dsp/gain_computer.*; test rows
+R-D1..R-D9 in doc/ai/m1-plan.md, realized in tests/dsp/
+gain_computer_test.cpp):
+
+- `target = clamp(−(loudness(wet) − loudness(dry)), ±MaxComp)` evaluated
+  on internal 100 ms slots against the two RUNNING meters (wet main /
+  dry aux mono sums; identical engines ⇒ a chain change is the only
+  thing that can move the delta — program dynamics pass, R-D2).
+- Bypass policy DOMINATES the delta policy: disengaged ⇒ target 0 dB
+  even with a valid delta (engage ramp per §10.3). First green run
+  pinning lesson: delta-validity alone dictated the target and the
+  "pre-engage stays 0" assertion caught it.
+- Hold (§10.4): EITHER tap's newest 100 ms slot under the wall-silence
+  floor (mean square ≤ 1e-12) freezes the chase (`target := applied`);
+  50-slot streaks light `no_signal_wet` (wet) / `dry_tap_missing` (aux)
+  at 5 s and clear on the first valid slot.
+- Clamp (FR-10, A2 default): ± 16 dB (was 24), range 0–48 unchanged;
+  `clamped` flag live only while the delta branch is active.
+- Ramp (FR-5): per-sample one-pole, tc 300 ms default; emission of every
+  post-step applied value is the processor's multiply source (FR-11, no
+  lookahead). Chunk invariance is BIT-EXACT at every sample (R-D8).
+- No reference object, no codec, no training counters anywhere;
+  persistence is parameters only (FR-22 narrowed; §3.5's APVTS binary
+  reference block is removed).
+
+Disclosed behavior (meter physics, accepted as spec-conformant): after a
+silence hold ends, the 3 s meter window still contains the silent tail,
+so the wettap reads low and the target legitimately OVERSHOOTS for up to
+~1 window until the drain completes (R-D8 reserves resume room; Δ ≤ the
+silence that was held). Pegging UI readouts later must not "fix" this —
+it is exactly the delta the meter sees.
+
+

@@ -16,6 +16,11 @@ state labels, and parameter persistence — verified on the full host
 matrix, including the GarageBand AU exercise that gates this milestone
 and the parked Ardour-CLAP check (build.md §6.10).
 
+*2026-10-22, Amendment A2: this goal statement predates the A2
+contract change — the GarageBand AU gate has retired and the gain
+computer is re-scoped to the delta engine; see the re-scope section at
+the bottom of this file, which is operative over the body above.*
+
 ## Architecture
 
 Three pure-C++ units in `src/dsp/`, each independently testable without
@@ -199,3 +204,97 @@ branch `m1-x64-rosetta-lane`):**
 stereo/dual-mono metering (UX-Q5), perceptual gate thresholds (FR-14
 deferral), stereo width, any SIMD work (TS §8 leaves SIMD behind an
 abstraction for a profiling-evidence decision, not a policy one).
+
+## Re-scope after Amendment A2 (2026-10-22, operative)
+
+The A2 contract change (`MakeGain_FR-v1.md` §10) retires the training
+FSM mid-PR-B2 and converts the product to the internal-sidechain delta
+engine. Of PR-B2's five landed commits (branch `m1-wire-up`):
+
+- `6108e3e` docs post-mortem — stands
+- `a076069` hardening + `21f554f`/`eabb35a` red/green trajectory — the
+  **emitter and chunk-invariance mechanics survive into the new engine**;
+  the training/reference semantics they pinned are retired with the FSM
+- `f7920a3` stage-1 wiring — replaced by the aux-bus wiring below
+
+**Remaining PR-B2 plan (lands at ~9 commits, within the 10-metric):**
+
+| # | Commit | Files | Checkpoint |
+|---|---|---|---|
+| A2 | `docs: FR amendment A2 + decisions + M1 re-scope` | `MakeGain_FR-v1.md`, `decisions.md`, this file | owner eyeball (docs only) |
+| PB2e-r | `tests(red): delta-engine spec R-D1..R-D9 + honest stub` — gain_computer rewritten to a stub; new tests for the delta engine (spec rows below) | `src/dsp/gain_computer.{h,cpp}` (in-place rewrite), `tests/dsp/gain_computer_test.cpp` | owner reviews assertions; red output quoted |
+| PB2e-g | `dsp(green): delta engine — dual-meter AGC, hold, clamp, ramp, emitter` | same (+ TS delta-engine spec note in `MakeGain_TS-v0.1.md` §9) | ALL GREEN quoted |
+| PB2f | `plugin: aux-bus wiring — second stereo input bus, wet/dry mono sums, Active-AGC` | `MakeGainProcessor.{h,cpp}`, `MakeGainEditor.{h,cpp}` (status line + 4 Hz refresh), no CMake change needed | **mac Reaper smoke A2**: TAP first in chain, Apply last; edit-compensation with program-dynamics pass-through; toggle; tap-loss fallback (silence the aux); **mono-track case with TapMono** (mono main = mono aux, pin 2) |
+
+**PB2f smoke record (owner session 2026-10-22, mac Reaper arm64):**
+
+- ✅ 2-track send setup (SOURCE no-FX → WET 1/2 + 3/4 pre-FX/pre-fader,
+  SOURCE master send off): duck compensation works, dry-tap-missing flag
+  proven during routing debug (aux feed absent → flag lit as specced).
+- ✅ 1-track TAP setup (`MakeGainTap` as FIRST FX, MakeGain LAST, no
+  sends): duck compensation works. Files: repo `jsfx/`, installed to the
+  Reaper user effects folder.
+- Finding, no action (owner): 1-track-without-TAP is impossible in
+  stock Reaper (sends tap post-FX; self-feed is a feedback loop) — the
+  aux-bus design + optional Tap covers 1-track workflows. Portability
+  answer per host: generic aux bus everywhere + host-specific
+  convenience (Reaper Tap; Ardour sidechain-from-track-input to be
+  verified in the §6.10 gate).
+- ⏳ Still open on the smoke: Active-toggle ramp-home, mono-track case,
+  first-Activate-no-aux calm (spot-checked in routing debug: no-spike
+  behavior held). Owner ruling: latency feel (ramp 300 ms / window 3 s)
+  postponed — the PR-B3 Ramp parameter makes it tunable, defaults
+  revisited only with proper heuristics.
+| PB2g | `docs: PR-B2 verification record + lanes` | this file | `docker-check.sh` arm64 + `--x64` on the branch; then push / PR-B2 (description names the main-landing residue) |
+
+**PR-B2 verification record (2026-10-22, branch tip `7388e06`):**
+
+- Lane arm64 native: ALL GREEN (configure+build+ctest, main+sanitizer
+  binaries) — evidence on the exact source bytes quoted in commits
+  `e1a949b` (engine) and `8aade8e` (wiring).
+- Lane amd64 (`--x64`, Rosetta-emulated): ALL GREEN same day, after the
+  last code change (three docs/jsfx commits touched no C++ since).
+- macOS native: built + installed (VST3/CLAP/AU Release, 22:11) — CLAP
+  needed a manual folder copy (clap-juce-extensions does not
+  auto-install it; note for the build.md sweep in PR-B3).
+- Reaper smoke A2: ✅ both topologies (2-track sends, 1-track TAP).
+- Commit-metric disclosure: branch is 12 commits (the plan budgeted
+  ~9–10; the delta = early TAP commit + two owner-ruling docs commits).
+  Squash-merge keeps the bisect story in the branch history.
+
+
+**PR-B3 (follow-up PR, M1 continuation):** stage-2 parameters (Metric,
+MaxComp default 16, ramp speed), the re-derived UI (FR-12 readouts,
+`clamped` / `no_signal` / `dry tap missing` flags, status line), Reaper
+smoke B/C, and the remaining M1 gate: **Ardour re-test incl. the parked
+CLAP checklist (§6.10)**. *(The TAP JSFX files shipped early — PR-B2,
+jsfx commit — because the owner's 1-track smoke needed them.)*
+
+**Amended M1 exit gates (A2):** mac Reaper compensation + meters sane;
+Asahi pen-transfer re-test; Ardour retest incl. CLAP. *(GarageBand AU
+exercise retired by A2.)*
+
+**Delta-engine spec rows (pin targets for PB2e-r; owner reviews):**
+
+- **R-D1** null invariant: dry == wet (identical streams) → target ≈ 0,
+  applied stays 0 while engaged.
+- **R-D2** program dynamics pass: both taps scaled by the same factor
+  (e.g. +3 dB) mid-engagement → target unchanged, applied unchanged.
+- **R-D3** edit compensation: wet drops −6 vs dry → target = +6, ramped;
+  wet boosted +6 → target = −6.
+- **R-D4** metric pairing: LUFS and dB RMS deltas are computed from the
+  same slot windows; switching metric re-targets at the next slot from
+  the still-running meters (nothing to re-capture).
+- **R-D5** clamp: |target| > MaxComp → applied at ±MaxComp, `clamped`
+  flag exposed (default 16 dB per A2).
+- **R-D6** ramp: engage from 0 dB, one-pole toward target (tc =
+  ramp speed, default 300 ms); disengage ramps to 0; no slam anywhere.
+- **R-D7** hold: EITHER tap's newest slot below the wall-silence floor →
+  freeze at last applied; resume on validity. `no_signal` streak (50
+  slots) flags wet silence ≥ 5 s; aux silence ≥ 5 s flags
+  `dry tap missing`.
+- **R-D8** chunk invariance: identical trajectories at every sample
+  across ragged/huge/zero chunk sizes (property carried from the
+  PB2a/B5 machinery — emitter now observes the AGC's applied gain).
+- **R-D9** state: no reference object, no codec, no training counters —
+  persistence is parameters only (FR-22 narrowed).

@@ -1,179 +1,153 @@
-// src/dsp/gain_computer.h — the compensate machine (FR-3): compares the
-// live measurement to the stored reference and produces the applied gain,
-// with the clamp, the ramp, the silence-hold and the training state
-// machine — all JUCE-free, pure C++17 (TS §7), so the full state machine
-// is unit-testable headless (the host-facing processor is thin glue).
+// src/dsp/gain_computer.h — the A2 delta engine ("gain computer") (FR §10):
+// continuously nulls the loudness delta the user's FX chain introduces
+// between two measurement taps:
 //
-// MakeGain DSP layer behaviors sourced here:
-//   FR-2/FR-4  READ (training): pressing to READ starts a training run;
-//              feed audio and the run completes ON ITS OWN after the
-//              fixed 3.0 s code window and captures BOTH metrics over
-//              that same window (FR-6a). Completing a run always leaves
-//              the machine IDLE (FR-2: the plugin stays un-engaged until
-//              the user engages Adjust); a re-read replaces the previous
-//              reference only at completion, never mid-run (FR-4).
-//   FR-3       ADJUST: applied gain target = ref[metric] − live[metric].
-//   FR-5       IDLE ↔ ADJUST engage: leaving IDLE ramps from the current
-//              applied gain (0 dB from fresh IDLE) — never a hard slam;
-//              entering IDLE ramps back to 0 dB the same way.
-//   FR-8       metric switch re-targets instantly from the SAME stored
-//              reference and the SAME live window — no re-measure, and
-//              the reference is untouched by the switch.
-//   FR-9/TS §9 ③  silence-hold: while no valid signal exists in the
-//              window (silence or below the 3.0 s-freshness floor), the
-//              target freezes at the last applied gain and the machine
-//              stops chasing; a valid reading resumes the chase.
-//   FR-10      clamp: |target| beyond MaxComp dB is applied AT MaxComp
-//              and the clamped flag is exposed (FR-12 shows it).
-//   FR-11      latency-neutral: gain is applied per-sample, no lookahead,
-//              no delay line.
-//   FR-7       reference codec: the reference record survives save/load
-//              as bytes, version-tagged, forward-compatible (a decoder
-//              ignores trailing bytes it does not know), all-or-nothing
-//              (a failed decode leaves the stored reference untouched).
+//   wet  = the chain-processed signal at this plugin's main input
+//   dry  = the pre-chain tap, arriving on the aux/sidechain input
+//
+// applied gain target = −(loudness(wet) − loudness(dry)), evaluated on
+// internal 100 ms slots, per selected metric, ramped per-sample toward
+// the slot target (one-pole, FR-5's smooth engage/disengage), clamped
+// to ±MaxComp. Program dynamics reach BOTH taps — equal taps mean zero
+// delta, so the plugin does not chase the music; chain EDITS move the
+// wet tap only, and the gain nulls them. There is no training: any
+// reference/FSM machinery from the M1 leveler era is retired (A2).
+//
+// MakeGain DSP layer behaviors sourced here (A2 contract):
+//   §10.2   target = −(wet − dry); slot-evaluated (chunk invariance)
+//   §10.3   engage/bypass: ramp from the current applied gain, no slam
+//   §10.4   either tap (near-)silent → hold last applied gain;
+//           sustained wet silence ≥ 5 s → no_signal flag; sustained
+//           aux silence ≥ 5 s → dry_tap_missing flag (the plugin does
+//           NOT claim to distinguish an unconnected tap from genuinely
+//           silent music — in both cases gain holds)
+//   FR-10   clamp: |target| beyond MaxComp is applied AT MaxComp; the
+//           clamped flag is exposed (FR §10.4/§10.6)
+//   FR-11   latency-neutral: per-sample gain application, no lookahead
 //
 // Realtime contract (the processor calls process() on the audio thread):
-//   no allocation, no locks, no I/O, no wall-clock reads. All setters are
-//   for non-audio time (parameter changes brought over atomics by the
-//   processor's glue — this module does not sync threads itself).
+//   no allocation, no locks, no I/O, no wall-clock reads. Setters are
+//   for non-audio time; the processor's glue crosses parameter changes
+//   over atomics — this module does not sync threads itself.
 //
-// Code constants (FR-2: the window length is NOT a UI setting; TS §9 ③:
-// ramp speed is a code-exposed default until UI exposure is approved)
+// Persistence note (FR-22, narrowed by A2): the machine holds NO session
+// state of its own — no reference object, no codec, no training counters.
+// What persists with the session is the parameter set only.
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <vector>
 
 #include "loudness_meter.h"
 
 namespace makegain::dsp {
 
-// Which metric pair drives the compensation target (FR-8: switchable at
-// any time; ReferenceRecord always carries both).
+// Which metric pair drives the chain delta (FR-6/FR-8 kept, A2 form);
+// both meters always run, so a switch re-targets at the next slot from
+// the same windows — nothing to re-capture.
 enum class GainMetric { lufs, db_rms };
 
-// The three machine states. `reading` is passthrough; `idle` is
-// passthrough with the applied gain already ramped to 0 dB; `adjusting`
-// applies gain.
-enum class GainMode { idle, reading, adjusting };
-
-// The reference record: both metric readings from the SAME 3.0 s window,
-// captured at training completion (FR-6a).
-struct ReferenceRecord {
-  double lufs = 0.0;   // −inf means "the window was silence"
-  double db_rms = 0.0;
-  bool valid = false;  // false until a training run has completed
-};
-
-// Flags the UI shows (FR-12): clamped is live while ADJUSTing (last
-// computed target exceeded the clamp); low_confidence sticks for the
-// current reference (captured from a silent window — re-read to fix);
-// no_signal lights on sustained wall-side silence.
+// Flags the UI shows (FR §10.6): clamped is live while the target hits
+// the MaxComp bound; no_signal is sustained WET silence (≥ 5 s);
+// dry_tap_missing is sustained AUX silence (≥ 5 s) — the honest label
+// for "the dry tap did not feed me", which cannot be told apart from
+// genuinely silent source audio.
 struct GainFlags {
   bool clamped = false;
-  bool low_confidence = false;
-  // FR-12/UX-Q3: "no signal" — the input wall went (near-)digitally
-  // silent and STAYED silent for the full 5.0 s code-constant grace
-  // (TS §9 ③). The machine freezes its chase on the FIRST silent slot;
-  // the flag timing is purely the UI-facing surface.
-  bool no_signal = false;
+  bool no_signal_wet = false;
+  bool dry_tap_missing = false;
 };
 
 class GainComputer {
  public:
-  // `sample_rate` is fixed for the machine's life (a plugin instance
-  // re-creates it on rate changes, like the meter it owns).
+  // `sample_rate` is fixed for the engine's life (a plugin instance
+  // re-creates one on rate changes, like the meters it owns).
   explicit GainComputer(double sample_rate);
 
   // -- non-audio-time setters ------------------------------------------
-  // FR-2/FR-4: idle→reading or adjusting→reading starts a fresh training
-  // run (the old reference stays valid until the new run completes).
-  // reading→idle or reading→adjusting ABORTS the run (keeping the old
-  // reference if any, rejecting whatever half-window it had).
-  void set_mode(GainMode mode);
-  // FR-8: instant re-target from the same reference + live window.
-  void set_metric(GainMetric metric);
-  void set_max_comp_db(double db);   // FR-10 clamp bound
-  void set_ramp_tc(double seconds);  // one-pole time constant of the ramp
+  void set_metric(GainMetric metric);  // targets again at the next slot
+  void set_max_comp_db(double db);     // FR-10 clamp bound
+  void set_ramp_tc(double seconds);    // one-pole time constant of the ramp
+  // Active toggle (A2 §10.3): engaged = delta-nulling; idle = ramp home
+  // to 0 dB from wherever the applied gain currently is.
+  void set_engaged(bool engaged);
 
   // -- audio thread -----------------------------------------------------
-  // Feed mono audio and advance the machine over `count` samples. Any
-  // block size (ragged, huge, zero) is safe; per-sample ramp math is
-  // identical regardless of blocking (asserted by tests).
-  void process(const float* samples, std::size_t count);
+  // Feed BOTH mono sums (wet, dry) and advance over `count` samples; any
+  // block size (ragged, huge, zero) is safe; the per-sample ramp math is
+  // identical regardless of blocking (pinned by the R-D8 test). When
+  // out_gain_db is set, it receives the applied gain in dB AFTER each
+  // sample's ramp step — the values the processor multiplies both
+  // channels by (10^(dB/20), FR-11). Caller owns `count` slots; writing
+  // them is purely observational (the engine advances identically
+  // without the array).
+  void process(const float* wet, const float* dry, std::size_t count,
+               float* out_gain_db);
 
   // -- reads (cheap, any thread) ----------------------------------------
-  GainMode mode() const;
   GainMetric metric() const;
-  ReferenceRecord reference() const;
   GainFlags flags() const;
-  // Current applied gain in dB (0.0 = unity, negative = attenuation).
-  // During reading/idle this is whatever the ramp has decayed to.
+  // Current applied gain in dB (0.0 = unity; negative = attenuation).
   double applied_gain_db() const;
+  // The last evaluated chain delta (wet − dry, current metric, BEFORE
+  // the sign flip that feeds the target) — a UI readout (FR §10.6).
+  double delta_db() const;
+  // True once BOTH meters hold a full window (freshness floor for the
+  // delta; until then the target holds).
+  bool delta_valid() const;
 
-  // -- FR-7 codec: reference record <-> bytes ---------------------------
-  // Returns an 18-byte, version-tagged, little-endian record; empty if
-  // no valid reference exists. Decode: false on any problem (bad tag,
-  // truncated, oversized version), true otherwise; trailing bytes are
-  // ignored (forward compatibility), and a false return guarantees the
-  // stored reference is unchanged. Byte order is assembled with shifts
-  // (endian-clean — the DSP purity rule, TS §9 ⑤), bits via memcpy.
-  // Test note: the round-trip test is same-host; cross-endian
-  // correctness is by construction, not executed.
-  std::vector<std::uint8_t> encode_reference() const;
-  bool decode_reference(const std::uint8_t* data, std::size_t size);
-
-  // Code constants (FR-2: window length is a code constant; TS §9 ③:
-  // ramp + clamp defaults live in code until UI exposure is approved).
-  static constexpr double kTrainingWindowSec = 3.0;
-  static constexpr double kDefaultRampTcSec = 0.3;
-  static constexpr double kDefaultMaxCompDb = 24.0;
-  // Anything at or below this LUFS is treated as "the window is silence"
-  // (drives silence-hold and the low-confidence flag).
-  static constexpr double kSilenceLufs = -140.0;
-  // Wall-side silence: newest 100 ms mean square ≤ this ⇒ digitally
-  // silent input (≈ −120 dB FS). Drives the freeze (FR-9) and the
-  // no_signal streak (5.0 s = 50 slots, TS §9 ③).
+  // Code constants (FR-2's "not a UI setting" spirit, A2 form: window /
+  // slot / streak lengths are code constants; MaxComp + ramp speed are
+  // the UI-exposed parameters arriving with stage 2).
+  static constexpr double kMeterWindowSec = 3.0;    // short-term window
+  static constexpr double kDefaultRampTcSec = 0.3;  // 300 ms ramp (FR-5)
+  // A2 §10.4: MaxComp default lowered 24 → 16 dB (range 0–48 unchanged).
+  static constexpr double kDefaultMaxCompDb = 16.0;
+  // Wall-slot silence threshold (newest 100 ms mean square ≤ this ⇒
+  // digitally silent input, ≈ −120 dB FS). Same definition as the M1
+  // meter-era gate: drives the hold AND both flags' streaks.
   static constexpr double kSilenceMeanSq = 1e-12;
+  // 5.0 s of 100 ms slots (TS §9 ③) before a silence flag lights.
   static constexpr std::size_t kNoSignalSlots = 50;
 
  private:
-  LoudnessMeter meter_;  // shared by READ capture and ADJUST measurement
+  LoudnessMeter wet_meter_;  // main input (chain-processed)
+  LoudnessMeter dry_meter_;  // aux tap (pre-chain); same engine ⇒ equal
+                             // inputs give a usefully EXACT zero delta
 
-  GainMode mode_ = GainMode::idle;
   GainMetric metric_ = GainMetric::lufs;
+  bool engaged_ = false;
 
   double sample_rate_ = 0.0;
   double max_comp_db_ = kDefaultMaxCompDb;
   double ramp_tc_ = kDefaultRampTcSec;
 
-  ReferenceRecord reference_;
   GainFlags flags_;
 
   double applied_db_ = 0.0;  // the ramped applied gain
-  double target_db_ = 0.0;   // what the ramp is currently chasing
+  double target_db_ = 0.0;   // what the ramp currently chases
+  double last_delta_db_ = 0.0;  // last evaluated wet − dry (UI readout)
 
-  // Implementation state (GREEN commit — private slots only; the public
-  // contract was already final at red): the cached one-pole α, the
-  // internal 100 ms evaluation-slot clock, and the training-run counter.
+  // Evaluation-slot schedule (internal fixed 100 ms schedule; the R-D8
+  // invariance needs AN internal schedule, and one only).
   double alpha_ = 0.0;
   std::uint64_t eval_slot_samples_ = 0;
   std::uint64_t slot_fed_ = 0;
-  std::size_t run_slots_ = 0;
 
-  // Wall-side silence detection (FR-9): raw squares of the slot being
-  // fed, the verdict at each boundary, and the silence-slot streak.
-  double slot_sq_ = 0.0;
-  bool tail_silent_ = false;
-  std::size_t silent_streak_ = 0;
+  // Wall-side silence detection per tap (hold gate + flag streaks).
+  double wet_slot_sq_ = 0.0;
+  double dry_slot_sq_ = 0.0;
+  std::size_t wet_silent_streak_ = 0;
+  std::size_t dry_silent_streak_ = 0;
 
-  // Target evaluation, exactly once per 100 ms slot boundary.
+  // Slot-boundary work: delta evaluation + flag bookkeeping.
   void evaluate();
-  // Per-sample one-pole advance of the applied gain toward the target.
-  void advance_ramp(std::size_t count);
-  // Raw sample energy of a chunk (the wall-side silence detector).
+  // Per-sample one-pole advance of applied toward target; optional
+  // observational emission of each post-step value (PB2a's contract,
+  // carried into the A2 engine).
+  void advance_ramp(std::size_t count, float* out = nullptr);
+  // Raw sample energy of a chunk (wall-side silence detector).
   static double slot_energy(const float* samples, std::size_t count);
 };
 

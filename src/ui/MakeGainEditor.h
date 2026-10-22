@@ -11,20 +11,23 @@
 // Rules of the separation (JUCE shows no mercy):
 //   * The UI thread must NEVER touch audio internals synchronously, and
 //     the audio thread must never wait on the UI. They talk through
-//     thread-safe channels (atomics, ValueTree state — wired when real
-//     parameters arrive).
+//     thread-safe channels: the processor's status atomics (PB2f) and
+//     APVTS parameters (PR-B3).
 //   * The editor is disposable: hosts destroy/recreate it freely (window
 //     close/reopen, project reload). The processor survives.
 //
-// M0 stub: a fixed-size dark window with a title label. Stock JUCE
-// components only (TS §1: no OpenGL); meters/graphs arrive with DSP.
+// PB2f stub UI: a fixed-size dark window with a title band and one live
+// status line (Timer-polled from the processor's atomics, 250 ms). The
+// re-derived A2 readout panel (chain delta, applied gain, labeled flags)
+// arrives in PR-B3.
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class MakeGainProcessor;   // forward declaration — include cycle avoidance
 
-class MakeGainEditor : public juce::AudioProcessorEditor
+class MakeGainEditor : public juce::AudioProcessorEditor,
+                       private juce::Timer
 {
 public:
     explicit MakeGainEditor (MakeGainProcessor& p);
@@ -35,6 +38,11 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
+    // Timer: repaint at 4 Hz so the status line reflects the engine's
+    // state (engaged / clamped / tap-loss) without audio-thread work:
+    // paint() only reads the processor's atomics.
+    void timerCallback() override;
+
     // Reference (not pointer!): editors are destroyed with their processor
     // in well-behaved hosts; JUCE's leak detector flags dangling UI state.
     MakeGainProcessor& processorRef;

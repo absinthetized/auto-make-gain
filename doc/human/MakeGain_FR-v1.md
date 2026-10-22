@@ -6,6 +6,10 @@
 >
 > This document captures *what the plugin must do*, not *how*. Tech specs live
 > in `../ai/` and will be written against these FRs once frozen.
+>
+> **2026-10-22 — Amendment A2 appended (§10).** It supersedes named parts of
+> §1–§8 (§10.0 lists every fate). The v1 body above stays untouched for
+> history; for anything it contradicts, §10 is operative.
 
 ---
 
@@ -148,3 +152,148 @@ No sidechain input. No external routing. One instance, one insert point.
   noise/silence gate threshold (absolute gate). Deferred in v1 only; the
   FR text (FR-5a, FR-9) should be revisited when this is designed so the
   gate definition exists in exactly one place.
+
+---
+
+## 10. Amendment A2 — internal-sidechain AGC (2026-10-22, owner ruling)
+
+> Written after smoke-testing the leveler reading of FR-3 in Reaper (the
+> "duck test"): a single measurement tap cannot distinguish an edit from
+> program dynamics, and the ear-safety incident exposed a
+> trained-reference model willing to compensate from a garbage reference.
+> The v1 body above stays for history; this section is the operative
+> contract for all current and future work.
+
+### 10.0 What A2 supersedes, and what survives
+
+| Item | Fate under A2 |
+|---|---|
+| §1 story; §2 FSM (IDLE/READ/ADJUST); FR-2, FR-4, FR-5a, FR-6a | **Retired** — no training phase, no Read button, no stored reference. |
+| FR-3 | **Replaced** (10.2). |
+| FR-5 toggle semantics; FR-9 hold; FR-10 clamp; FR-11 latency; FR-20/FR-21 | **Kept** (hold/clamp re-derived on the delta engine, 10.4). |
+| FR-6 metric options; FR-8 metric-switching freedom | **Kept** — applied to the delta pairing (switching needs no re-capture). |
+| FR-7 reference persistence | **Retired** — persisted state = parameters only (FR-22 narrows accordingly). |
+| FR-12 UI readouts | **Re-derived** (10.6). |
+| FR-13 Read button | **Retired** — controls: Active, Metric, MaxComp, Ramp (FR-14 unchanged). |
+| FR-16 AU/GarageBand | **Amended** (10.5). |
+| §7 UX-Q1/Q2/Q6 | **Retired with training**; UX-Q3/Q4/Q5 survive in re-derived form. |
+| §8 "No sidechain/dual-instance reference mode" | **Amended** (10.7). |
+
+### 10.1 Architecture: one instance, two stereo input pairs
+
+MakeGain is **one plugin** with **two stereo inputs** — main = chain-
+processed ("wet") and aux = pre-chain tap ("dry") — and one stereo
+output. The dry tap travels over the host's own audio plumbing; the
+plugin performs no routing magic:
+
+- **Bus rule**: the aux bus mirrors the main bus's channel count. A
+  genuinely mono track yields a mono main bus and a **mono aux (one pin
+  — pin 2)**; stereo mains get the stereo aux pair (pins 3/4). The
+  engine consumes mono sums (UX-Q5), so it is channel-count agnostic;
+  only pin numbering changes.
+- **Reaper (recommended path)**: the shipped, optional **MakeGain TAP**
+  JSFX is inserted first in the FX chain and copies channels 1/2 onto
+  3/4, bit-exact (4 output pins). Reaper's serial chain flow carries
+  3/4 down to the plugin's aux input pins; intermediate stereo FX leave
+  3/4 untouched; Reaper raises the track channel count automatically on
+  insert.
+- **Plain routing fallback (all hosts)**: any sidechain route the host
+  offers (Reaper: track send into channels 3/4 from a clean dry track;
+  Ardour: the plugin's native sidechain hookup). Documented caveat: a
+  routed dry copy is static and diverges from later edits of the main
+  items ("stale tap" — a risk the in-chain TAP does not have).
+- The **TAP is optional** — a convenience layer, not part of the
+  protocol (owner ruling, 2026-10-22).
+
+### 10.2 Core semantics: null the chain's delta
+
+The applied-gain target is evaluated every 100 ms slot, per selected
+metric:
+
+    target = −( loudness(wet) − loudness(dry) )
+
+then ramped per-sample (FR-5's one-pole, tc = ramp speed). Invariants
+the tests pin:
+
+- **Program dynamics pass through**: a level change present in BOTH
+  taps (normal musical motion) leaves the delta unchanged — the applied
+  gain does not chase the music. In steady state, output loudness =
+  dry loudness.
+- **Edits are compensated**: any change in the chain between the two
+  taps (enable/configure/bypass an FX) moves wet only — the gain nulls
+  it within the ramp.
+- Honest implication: on *dynamic* chains (compressors, saturators —
+  anything whose processing delta varies with the program) the AGC
+  partially nulls that gain modulation. That is gain compensation by
+  definition; users who reject it disengage Active.
+
+### 10.3 Modes
+
+- **Idle (Active off)** — unity, ramped to 0 dB (FR-5 semantics kept).
+- **Engaged (Active on)** — delta-nulling per 10.2; engagement always
+  starts the ramp from the current applied gain — never a slam.
+- No READ phase exists.
+
+### 10.4 Silence, tap loss, ear safety
+
+- **Delta validity**: both taps' newest wall slot must be above the
+  digital-silence floor (existing wall-slot gate machinery). If EITHER
+  tap is silent, the delta is meaningless → **hold last applied gain**
+  (FR-9 re-derived); resume when valid audio returns to both taps.
+- `no_signal`: wet-side silence sustained ≥ 5 s flags the UI (TS §9 ③
+  gate unchanged). Aux-side silence sustained ≥ 5 s flags
+  **"dry tap missing"** — the plugin cannot, and does not claim to,
+  distinguish an unconnected tap from genuinely silent source audio;
+  in both cases the gain holds.
+- **Ear safety profile**: with no trained-reference regime, the
+  leveler-era pathology (compensating from a garbage reference into a
+  large boost slam) is structurally impossible. All target moves ramp;
+  MaxComp's default is lowered **24 → 16 dB** (range 0–48 unchanged,
+  parameter arrives stage 2).
+
+### 10.5 Host/format matrix (amended; GarageBand dropped)
+
+- Hosts of record: **Reaper** (mac + Linux) and **Ardour** (mac +
+  Linux). **GarageBand is removed from the matrix** (owner,
+  2026-10-22): the GarageBand AU exercise gate retires.
+- **AU stays a best-effort build** (same standing as the x86_64 lane):
+  it is compiled and shipped, but carries no validated-behavior claims.
+- Latency note (accepted v1 limitation): chain PDC between the dry tap
+  and the plugin shifts wet relative to dry. Slow loudness windows
+  absorb small skews; no per-sample alignment is attempted (FR-11
+  spirit: no added latency of our own).
+
+### 10.6 UI (re-derived, FR-12)
+
+Always shows: dry loudness, wet loudness, chain delta (wet − dry,
+selected metric), applied gain, Active state, metric; flags: `clamped`,
+`no_signal` (wet), `dry tap missing` (aux). No reference readout exists.
+
+### 10.7 Rejected architecture, kept on record
+
+A two-plugin SRC/DST pair ("clamp") communicating over undocumented
+inter-instance IPC was evaluated as a routing-automation idea and
+**rejected**: the dry data must still travel, and out-of-spec
+transports break under host sandboxing, instance pairing, and
+multi-pair projects. The host's own audio plumbing is the robust
+transport. (A Reaper-only convenience variant over standard FX pin
+patching remains a possible future addendum, not v1.)
+
+### 10.8 TAP spec (Reaper convenience layer)
+
+Two text files (e.g. `plugins/MakeGainTap.jsfx`,
+`plugins/MakeGainTapMono.jsfx`):
+
+- **Tap (stereo chains)**: declares 4 output pins; 3/4 = 1/2, bit-exact.
+- **TapMono (mono chains)**: declares 2 output pins; 2 = 1, bit-exact
+  (a mono main's aux is pin 2).
+
+No math in either. Imported once, inserted first in a chain. Not
+required for AGC operation — plain routing works everywhere.
+
+**Routing rule for stereo mains** (both paths): the dry tap must occupy
+BOTH aux channels — mono content is duplicated to 3/4 (the TAP does
+this inherently). A mono-only feed into one aux channel reads 6 dB too
+quiet in the aux mono-sum and overcompensates by that skew. The plugin
+deliberately does NOT auto-detect this (hard-panned content in the aux
+is legitimate audio); it is a documented misroute, not a code branch.

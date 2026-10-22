@@ -1,0 +1,32 @@
+desc:MakeGain Tap (stereo) — copies channels 1/2 into 3/4 as the pre-chain dry tap
+//tags: utility gain-staging makegain
+//author: auto-make-gain (AGPLv3, https://github.com/…/auto-make-gain)
+//
+// PURPOSE (FR §10.1/§10.7, A2): MakeGain nulls the loudness delta its
+// host chain introduces. It needs the PRE-CHAIN dry signal on its aux
+// bus. This FX makes the wiring trivial for ONE track:
+//
+//   chain order:  [MakeGain Tap] … any chain FX … [MakeGain  ← last]
+//
+// The Tap copies the track's own input into lanes 3/4 at chain entry.
+// Ordinary stereo FX do not write lanes 3/4, so those lanes ride
+// untouched through the whole chain = still the dry signal. MakeGain
+// (its own 4-pin build) reads lanes 3/4 as the aux. No sends, no second
+// track.
+//
+// Reaper notes: writing lanes 3/4 auto-raises the track's channel count.
+// On a MONO track use "MakeGainTap Mono" instead (copies 1 → 2).
+// Misroute warning (documented): feeding the stereo aux ONE dry channel
+// reads −6 dB and overcompensates — hard-panned aux content is legal,
+// so the plugin will not detect/correct that for you.
+
+in_pin:audio L
+in_pin:audio R
+out_pin:audio L
+out_pin:audio R
+out_pin:dry L
+out_pin:dry R
+
+@sample
+spl3 = spl0;
+spl4 = spl1;
