@@ -188,8 +188,9 @@ class GainComputer {
 
   // Target evaluation, exactly once per 100 ms slot boundary.
   void evaluate();
-  // Per-sample one-pole advance of the applied gain toward the target.
-  void advance_ramp(std::size_t count);
+  // Per-sample one-pole advance of the applied gain toward the target;
+  // when `out` is set, each post-step value is observed (PB2a green).
+  void advance_ramp(std::size_t count, float* out = nullptr);
   // Raw sample energy of a chunk (the wall-side silence detector).
   static double slot_energy(const float* samples, std::size_t count);
 };

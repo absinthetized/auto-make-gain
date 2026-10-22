@@ -86,15 +86,6 @@ GainComputer::GainComputer(double sample_rate)
       static_cast<std::uint64_t>(sample_rate * kEvalSlotSec + 0.5);
 }
 
-void GainComputer::process(const float* /*samples*/, std::size_t /*count*/,
-                           float* /*out_gain_db*/) {
-  // PB2a RED stub: the sample-indexed overload is honestly unable to
-  // emit a trajectory — it advances nothing and writes nothing, so the
-  // emitted arrays stay trap values and the trajectory tests fail with
-  // real evidence. The GREEN commit implements it as the same per-sample
-  // one-pole advance as the plain process() route, plus the emission.
-}
-
 void GainComputer::set_mode(GainMode mode) {
   // (Re)entering READ always starts a fresh run — "press training" means
   // exactly that (FR-2 first press, FR-4 re-press both behave alike).
@@ -120,17 +111,26 @@ void GainComputer::set_ramp_tc(double seconds) {
 }
 
 void GainComputer::process(const float* samples, std::size_t count) {
+  // Plain route = observation-off delegate (single body, single truth
+  // for the schedule — the R3 property can only have one home).
+  process(samples, count, nullptr);
+}
+
+void GainComputer::process(const float* samples, std::size_t count,
+                           float* out_gain_db) {
   // Stream the block in ≤ one evaluation-slot steps: feed the meter,
   // evaluate exactly when the slot boundary is crossed, ramp the same
   // samples toward whatever target is current. Host chunk sizes can
-  // never change the trajectory (the R3 property).
+  // never change the trajectory (the R3 property). The optional out
+  // array receives the gain dB in force AFTER each sample's ramp step
+  // — one float store per sample, no other cost.
   std::size_t i = 0;
   while (i < count) {
     const std::uint64_t room = eval_slot_samples_ - slot_fed_;
     const std::size_t take = static_cast<std::size_t>(
         std::min<std::uint64_t>(room, count - i));
     meter_.process(samples + i, take);  // realtime-safe accumulation
-    advance_ramp(take);                 // per-sample one-pole below
+    advance_ramp(take, out_gain_db ? out_gain_db + i : nullptr);
     slot_sq_ += slot_energy(samples + i, take);
     i += take;
     slot_fed_ += take;
@@ -213,9 +213,12 @@ void GainComputer::evaluate() {
   target_db_ = 0.0;
 }
 
-void GainComputer::advance_ramp(std::size_t count) {
+void GainComputer::advance_ramp(std::size_t count, float* out) {
   for (std::size_t j = 0; j < count; ++j) {
     applied_db_ += (target_db_ - applied_db_) * alpha_;
+    if (out != nullptr) {
+      out[j] = static_cast<float>(applied_db_);  // observation, cheap
+    }
   }
 }
 
