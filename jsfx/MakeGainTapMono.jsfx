@@ -1,0 +1,19 @@
+desc:MakeGain Tap Mono — copies channel 1 into 2 (mono aux tap, mono tracks)
+//tags: utility gain-staging makegain
+//author: auto-make-gain (AGPLv3, https://github.com/…/auto-make-gain)
+//
+// Mono-track variant of MakeGain Tap (FR §10.1/§10.7, A2). AUS bus rule:
+// a mono track gets a mono main (pin 1) and a mono aux (pin 2). Place
+// FIRST in the chain; MakeGain (mono build), LAST:
+//
+//   chain order:  [MakeGain Tap Mono] … chain FX … [MakeGain]
+//
+// The copy rides lane 2 untouched by mono FX (they process lane 1 only),
+// so MakeGain's aux reads the pre-chain dry.
+
+in_pin:audio (mono)
+out_pin:audio (mono)
+out_pin:dry (mono)
+
+@sample
+spl1 = spl0;
