@@ -406,6 +406,90 @@ TEST_CASE("gain computer: reference codec round-trip + forward compat (R7)") {
   CHECK_FALSE(g3.decode_reference(bytes.data(), 4));
 }
 
+TEST_CASE("gain computer: per-sample applied-gain trajectory (PB2a)") {
+  // R-t1: the overload emits the ramp VALUE at every sample index — a
+  // monotone approach toward the target that ends exactly at the
+  // machine's own internal applied gain (no off-by-one between the
+  // emitted buffer and the machine state the tests already pin).
+  GainComputer g(kRate);
+  train(g, sine(3.2, 0.5));
+  g.set_mode(GainMode::adjusting);
+  const std::vector<float> adj = sine(8.0, 1.0);
+  std::vector<float> out(adj.size(), 0.0f);
+  static const std::size_t chunks[] = {7, 11, 13};
+  std::size_t i = 0;
+  std::size_t k = 0;
+  while (i < adj.size()) {
+    const std::size_t take = std::min(chunks[k % 3], adj.size() - i);
+    g.process(adj.data() + i, take, out.data() + i);
+    i += take;
+    ++k;
+  }
+  REQUIRE(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
+  for (std::size_t j = 1; j < out.size(); ++j) {
+    // Monotone descent NOTE: valid only because this scenario chases
+    // DOWNWARD (ref −9.03 vs live −3.01 → target −6.02 from 0 dB). An
+    // upward chase mirrors the comparison (owner review: keep it
+    // prefix-tagged if this helper shape gets copied elsewhere).
+    if (out[j] > out[j - 1] + 1e-9) {
+      FAIL("trajectory breaks monotone descent at sample " << j
+           << ": " << out[j - 1] << " -> " << out[j]);
+      return;
+    }
+  }
+  CHECK(out.back() == Catch::Approx(g.applied_gain_db()).margin(1e-6));
+
+  // R-t2: the EMITTED trajectory is chunk-invariant at EVERY SAMPLE
+  // (the R3 endpoint/trace property applied to the new output surface).
+  auto run_traj = [&](std::size_t gran) {
+    GainComputer gg(kRate);
+    train(gg, sine(3.2, 0.5));
+    gg.set_mode(GainMode::adjusting);
+    std::vector<float> trj(adj.size(), 0.0f);
+    std::size_t pos = 0;
+    while (pos < adj.size()) {
+      const std::size_t take = std::min(gran, adj.size() - pos);
+      gg.process(adj.data() + pos, take, trj.data() + pos);
+      pos += take;
+    }
+    REQUIRE(gg.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
+    return trj;
+  };
+  const auto t4 = run_traj(4);
+  const auto t476 = run_traj(476);
+  for (std::size_t j = 0; j < t4.size(); ++j) {
+    if (std::fabs(t4[j] - t476[j]) > 1e-9) {
+      FAIL("emitted trajectories diverge at sample " << j << ": "
+           << t4[j] << " vs " << t476[j]);
+      return;
+    }
+  }
+
+  // R-t3: the overload is purely observational — a machine advanced
+  // with it must end EXACTLY where a machine advanced without it ends
+  // (and the emitted last sample is that same value, sample-aligned).
+  GainComputer ga(kRate);
+  GainComputer gb(kRate);
+  train(ga, sine(3.2, 0.5));
+  train(gb, sine(3.2, 0.5));
+  const std::vector<float> prog = sine(4.0, 1.0);
+  std::vector<float> scratch(prog.size(), 0.0f);
+  ga.set_mode(GainMode::adjusting);
+  gb.set_mode(GainMode::adjusting);
+  std::size_t pos = 0;
+  while (pos < prog.size()) {
+    const std::size_t take = std::min(std::size_t{64}, prog.size() - pos);
+    ga.process(prog.data() + pos, take, scratch.data() + pos);
+    gb.process(prog.data() + pos, take);
+    pos += take;
+  }
+  CHECK(ga.applied_gain_db() ==
+        Catch::Approx(gb.applied_gain_db()).epsilon(1e-12));
+  CHECK(gb.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
+  CHECK(scratch.back() ==
+        Catch::Approx(gb.applied_gain_db()).margin(1e-6));
+}
+
 TEST_CASE("gain computer: mid-READ transitions — abort, timer restart, "
           "replace-at-completion (FR-2/FR-4/FR-5)") {
   // Case A: engaging ADJUST mid-run ABORTS the run (header contract):

@@ -86,6 +86,15 @@ GainComputer::GainComputer(double sample_rate)
       static_cast<std::uint64_t>(sample_rate * kEvalSlotSec + 0.5);
 }
 
+void GainComputer::process(const float* /*samples*/, std::size_t /*count*/,
+                           float* /*out_gain_db*/) {
+  // PB2a RED stub: the sample-indexed overload is honestly unable to
+  // emit a trajectory — it advances nothing and writes nothing, so the
+  // emitted arrays stay trap values and the trajectory tests fail with
+  // real evidence. The GREEN commit implements it as the same per-sample
+  // one-pole advance as the plain process() route, plus the emission.
+}
+
 void GainComputer::set_mode(GainMode mode) {
   // (Re)entering READ always starts a fresh run — "press training" means
   // exactly that (FR-2 first press, FR-4 re-press both behave alike).

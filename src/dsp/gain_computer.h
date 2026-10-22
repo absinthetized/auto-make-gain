@@ -104,6 +104,17 @@ class GainComputer {
   // identical regardless of blocking (asserted by tests).
   void process(const float* samples, std::size_t count);
 
+  // Sample-indexed variant (PB2a): same advance, PLUS one written output
+  // per sample — out_gain_db[i] = the applied gain (dB) in force for
+  // sample i, after the ramp step for that sample. The caller owns the
+  // array (exactly `count` slots); the machine writes nothing besides
+  // those values: allocation-free, no locks, purely observational (the
+  // machine's own state advances identically with our without the out
+  // array). Values are what the host-facing processor multiplies the
+  // sample by: 10^(out/20).
+  void process(const float* samples, std::size_t count,
+               float* out_gain_db);
+
   // -- reads (cheap, any thread) ----------------------------------------
   GainMode mode() const;
   GainMetric metric() const;
