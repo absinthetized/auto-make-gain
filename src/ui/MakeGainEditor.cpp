@@ -32,7 +32,6 @@ void MakeGainEditor::paint (juce::Graphics& g)
     // load-check is self-verifying (the label must match the branch's
     // promised behavior). Updated manually once per PR — if this text is
     // wrong about the loaded binary, the wrong build is loaded.
-    g.drawText ("M1 PR-B2 stage 1 \u2014 gain machine wired (Active/Read);"
-                " meters & controls arrive in PB3",
+    g.drawText ("M1 PR-B2 \u2014 A2 delta engine rebuild: passthrough; wiring follows",
                 getLocalBounds().removeFromBottom (40), juce::Justification::centred);
 }

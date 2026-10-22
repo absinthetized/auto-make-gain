@@ -1,533 +1,442 @@
-// tests/dsp/gain_computer_test.cpp — the compensate machine spec (RED
-// phase; AGENTS.md rule 8: the owner reviewed these assertions before any
-// real implementation exists — owner review 2026-10-20 applied: trace-
-// based block invariance (R3), transparent metric-switch assertion (R8),
-// clamp transition still ramps (R2), silence sentinel pinned (R6b),
-// tautological step bound dropped from R5 in favor of R3, structural
-// codec-byte audit (R7), fixed-granularity feed helper).
+// tests/dsp/gain_computer_test.cpp — the A2 delta-engine spec (RED
+// phase; AGENTS.md rule 8: the owner reviews these assertions before any
+// real implementation exists).
 //
-// Case map (R# refs the PR-B plan in doc/ai/m1-plan.md; FR# the frozen
-// contract doc/human/MakeGain_FR-v1.md):
+// Spec source: FR §10 (Amendment A2) + engine rows R-D1..R-D9 in
+// doc/ai/m1-plan.md. The FSM-era cases (R1–R8, R-t1..t3, training, the
+// reference codec) died with that spec and are NOT re-pinned here — the
+// retired implementation lives in git history (PB1/PB2 commits).
 //
-//   R6  READ self-completes exactly at the 3.0 s code window (FR-2/FR-4),
-//       captures BOTH metrics from the same window (FR-6a), and leaves
-//       the machine IDLE.
-//   R6b READ over silence still completes; the record holds the silence
-//       sentinel (−inf, not 0 dB) and low_confidence TRUE (FR-5a). The
-//       flag is a property of the current reference: it persists after
-//       the reference is put to work; a fresh READ completion clears it.
-//       Engaging a silent record: target = −inf − live clamps to −24 dB.
-//   R5  Engage from IDLE starts proving at ~0 dB (no slam, no re-train,
-//       FR-5). Identity property folded in: engaging against the same
-//       program it was trained on ≈ 0 dB compensation (FR-3 no-op).
-//       Zipper-freeness is NOT asserted here by a step bound (a one-pole
-//       trivially satisfies any such bound — tautological); it is proven
-//       per-sample by R3's trace equality.
-//   R3  Ramp = per-sample one-pole → BLOCK INVARIANCE: the same stream
-//       fed in different chunk sizes produces an identical applied-gain
-//       TRACE at fixed 480-sample checkpoints (10 ms) across the whole
-//       run, not merely the same endpoint. This is the property that
-//       makes ragged hosts harmless and automation safe.
-//   R1  Compensation settles at ref[metric] − live[metric] (FR-3).
-//   R8  Metric switch (FR-8): re-targets WITHOUT re-read — reference
-//       untouched, and the switch is transparent at the anchor tone
-//       (both pairings coincide there, the PR-A B4 cross-tie): same
-//       settled −6.02 dB, no jump at the switch moment. A metric-spread
-//       re-target proof needs a non-anchor program with a pinned K-gain;
-//       deferred until one is golden-verified.
-//   R2  Clamp (FR-10): |target| beyond MaxComp dB applies AT the bound;
-//       clamped flag truthful, both signs — AND the clamp successor
-//       still ramps: per-call applied gain moves < 0.1 dB, so no
-//       implementation may jump straight to ±24.
-//   R4  Silence-hold (FR-9 / TS §9 ③): silence freezes the last applied
-//       gain (no chase-to-zero, no runaway); a valid signal resumes.
-//   R7  Reference codec (FR-7): round-trip identity; behavioral (the
-//       decoded machine compensates identically); trailing bytes ignored
-//       (forward compat); garbage refused WITHOUT touching the stored
-//       reference, truncated header refused; byte-structure audited
-//       (18 bytes, version tag first). NOTE: the round-trip itself is a
-//       same-host test; the cross-endian guarantee is structural —
-//       shift-assembled little-endian (header contract), not executed.
+// Case map:
 //
-// Golden math (PR-A B1/B2 ground truth runs through every number here):
-//   The 997 Hz/48 kHz K-chain answers +0.691 dB (≈ flat), so for a
-//   full-scale-amp/a sine:
-//     lufs   = −3.009 + 20·log10(a)
-//     db_rms = −3.010 + 20·log10(a)     (both −inf when a = 0)
-//   amp 0.5 → pair ≈ −9.03 dB; amp 1.0 → ≈ −3.01 dB; amp 0.05 → −29.03.
-// Method: machines are driven with ragged block feeds (7/11/13 cycling)
-// wherever possible, then settled well past window-freshness (3.0 s) and
-// ramp convergence (≈ 5·tc ≈ 1.5 s) before the settled-gain assertions.
+//   R-D1  equal taps ⇒ zero delta; engine must not act (null invariant)
+//   R-D2  program dynamics pass: equal level change in BOTH taps leaves
+//         the applied gain untouched (identical meters ⇒ delta exactly 0)
+//   R-D3  edit compensation: wet-only level change is nulled (±6 dB pair)
+//   R-D4  metric pairing: LUFS vs dB RMS delta re-targets from the still-
+//         running meters at the next slot (meter-as-oracle for values)
+//   R-D5  clamp: |target| > MaxComp (16 dB default, A2) → applied AT the
+//         bound, clamped flag exposed, both signs
+//   R-D6  ramp: engage ramps to target (one-pole, closed-form window
+//         check over the ≤100 ms slot take-over), disengage ramps home;
+//         per-sample step bound never exceeded
+//   R-D7  hold: EITHER tap silent → freeze at the last applied gain,
+//         resume on validity; flag streaks: wet ≥ 5 s → no_signal_wet,
+//         aux ≥ 5 s → dry_tap_missing; both clear again on validity
+//   R-D8  chunk invariance at EVERY sample: ragged vs uniform feeds emit
+//         bit-identical applied-gain trajectories (content has a
+//         wet-silence burst, so the hold sits mid-trajectory)
+//   R-D9  no memory beyond meters + parameters: disengage then re-engage
+//         repeats the same compensation; nothing persists in secret
+//
+// Method: both taps are fed chunk-wise by ONE helper (each tap gets the
+// same chunk size; R-D8 proves the per-sample property). Golden numbers
+// use the 1 kHz-sine anchor: 0 dBFS ⇒ −3.0 LUFS, linear in level ⇒
+// X dBFS ⇒ LUFS X−3.00. R-D4 uses a LoudnessMeter as the oracle so the
+// test carries no hand-rolled K-weighting math.
 
 #include "gain_computer.h"
+#include "loudness_meter.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
 #include <vector>
 
-using makegain::dsp::GainComputer;
-using makegain::dsp::GainMetric;
-using makegain::dsp::GainMode;
+using Catch::Approx;
+
+// The DSP layer's own namespace, unqualified for the tests.
+namespace dsp = makegain::dsp;
 
 namespace {
 
-constexpr double kPi = std::numbers::pi_v<double>;
 constexpr double kRate = 48000.0;
 
-// Deterministic 997 Hz sine of `seconds`, amplitude `amp`, fresh phase.
-std::vector<float> sine(double seconds, double amp) {
-  const std::size_t n = static_cast<std::size_t>(seconds * kRate);
-  std::vector<float> v(n);
-  for (std::size_t i = 0; i < n; ++i) {
-    v[i] = static_cast<float>(
-        amp * std::sin(2.0 * kPi * 997.0 * static_cast<double>(i) / kRate));
+std::size_t seconds(double s) { return static_cast<std::size_t>(kRate * s); }
+
+// 1 kHz sine at db dBFS, sample-index phase (deterministic).
+std::vector<float> sine_1k(double db, std::size_t count) {
+  const double amp = std::pow(10.0, db / 20.0);
+  std::vector<float> v(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const double t = static_cast<double>(i) / kRate;
+    v[i] = static_cast<float>(amp * std::sin(2.0 * std::numbers::pi
+                                             * 1000.0 * t));
   }
   return v;
 }
 
-std::vector<float> zeros(double seconds) {
-  return std::vector<float>(static_cast<std::size_t>(seconds * kRate), 0.0f);
-}
-
-// Feed the whole buffer in cycling ragged chunks of 7/11/13 samples —
-// the worst-case accumulation pattern that also hosts really use.
-void feed_ragged(GainComputer& g, const std::vector<float>& v) {
-  static const std::size_t chunks[] = {7, 11, 13};
-  std::size_t i = 0;
-  std::size_t k = 0;
-  while (i < v.size()) {
-    const std::size_t take = std::min(chunks[k % 3], v.size() - i);
-    g.process(v.data() + i, take);
-    i += take;
-    ++k;
+// Sine of a chosen frequency (R-D4's shelf-separated content).
+std::vector<float> sine_at(double freq, double db, std::size_t count) {
+  const double amp = std::pow(10.0, db / 20.0);
+  std::vector<float> v(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const double t = static_cast<double>(i) / kRate;
+    v[i] = static_cast<float>(amp * std::sin(2.0 * std::numbers::pi * freq
+                                             * t));
   }
+  return v;
 }
 
-// Ragged feed that also tracks the max per-CALL applied-gain move (used
-// to prove a transition still ramps — a direct jump to a target, e.g. a
-// clamped value applied without the ramp, shows up as a multi-dB step).
-double feed_ragged_tracked(GainComputer& g, const std::vector<float>& v) {
-  static const std::size_t chunks[] = {7, 11, 13};
-  double prev = g.applied_gain_db();
-  double max_step = 0.0;
-  std::size_t i = 0;
-  std::size_t k = 0;
-  while (i < v.size()) {
-    const std::size_t take = std::min(chunks[k % 3], v.size() - i);
-    g.process(v.data() + i, take);
-    i += take;
-    ++k;
-    const double now = g.applied_gain_db();
-    max_step = std::max(max_step, std::fabs(now - prev));
-    prev = now;
-  }
-  return max_step;
+std::vector<float> digital_silence(std::size_t count) {
+  return std::vector<float>(count, 0.0f);
 }
 
-// Feed `n` samples at a fixed max granularity (`gran` = worst chunk) and
-// record the applied gain at every `trace_every`-sample boundary. The
-// boundary-crossing aligns the trace to absolute sample positions no
-// matter the chunking — large `gran` chunks are simply split at their
-// next boundary, so traces from different granularities are element-wise
-// comparable (same times).
-void feed_fixed_traced(GainComputer& g, const float* v, std::size_t n,
-                       std::size_t gran, std::size_t trace_every,
-                       std::vector<double>& trace) {
+// Feed both taps chunk-wise along a repeating pattern; write the
+// applied-gain trajectory into `out` (same length, same order).
+void feed(dsp::GainComputer& g, const std::vector<float>& wet,
+          const std::vector<float>& dry, std::vector<float>& out,
+          std::initializer_list<std::size_t> pattern) {
+  const std::size_t n = wet.size();
+  out.assign(n, -99.0f);  // trap: any position not written stays −99
   std::size_t pos = 0;
-  std::size_t next = trace_every;
+  auto it = pattern.begin();
   while (pos < n) {
-    const std::size_t lim = std::min(n, next);
-    const std::size_t take = std::min(gran, lim - pos);
-    g.process(v + pos, take);
+    if (it == pattern.end()) it = pattern.begin();
+    const std::size_t take = std::min(*it, n - pos);
+    g.process(wet.data() + pos, dry.data() + pos, take, out.data() + pos);
     pos += take;
-    if (pos == next) {
-      trace.push_back(g.applied_gain_db());
-      next += trace_every;
-    }
+    ++it;
   }
-}
-
-// Full-trajectory comparison for R3: traces must agree at every aligned
-// checkpoint, not just at the settle point — a buggy accumulator that
-// drifts mid-stream and converges to the same fixed point FAILS here.
-void check_traces_equal(const std::vector<double>& a,
-                        const std::vector<double>& b) {
-  REQUIRE(a.size() == b.size());
-  for (std::size_t i = 0; i < a.size(); ++i) {
-    if (std::fabs(a[i] - b[i]) >
-        1e-9 * std::max(1.0, std::fabs(a[i]))) {
-      FAIL("applied-gain traces diverge at checkpoint " << i << ": "
-           << a[i] << " vs " << b[i]);
-      return;
-    }
-  }
-}
-
-// Run a full READ on `program` and assert FR-2/FR-4 completion semantics.
-void train(GainComputer& g, const std::vector<float>& program) {
-  g.set_mode(GainMode::reading);
-  feed_ragged(g, program);
-  REQUIRE(g.mode() == GainMode::idle);  // self-completing, FR-2
-  REQUIRE(g.reference().valid);         // both metrics captured, FR-6a
 }
 
 }  // namespace
 
-TEST_CASE("gain computer: READ self-completes at the 3.0 s window (R6)") {
-  GainComputer g(kRate);
+// ---------------------------------------------------------------------------
+// R-D1 — null invariant: equal taps, no action.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: equal taps give zero delta — no chase (R-D1)") {
+  const std::size_t n = seconds(4.5);
+  const std::size_t settle = seconds(3.5);
+  std::vector<float> wet = sine_1k(0.0, n);  // identical streams
+  std::vector<float> dry = wet;
 
-  // Just BEFORE the window: no reference yet. Note on probe tightness
-  // (owner review): the exact 3.0 s boundary is unreachable under the
-  // ragged 7/11/13 feeds — completion MUST count samples (slot-aligned
-  // counters), which is precisely what B5 pins on the meter side.
-  g.set_mode(GainMode::reading);
-  feed_ragged(g, sine(2.9, 0.5));
-  CHECK_FALSE(g.reference().valid);
+  dsp::GainComputer g(kRate);
+  g.set_engaged(true);
+  std::vector<float> out;
+  feed(g, wet, dry, out, {7u, 11u, 13u, 1u, 479u});
 
-  // The remaining 0.3 s crosses 3.0 s → the run completes ON ITS OWN
-  // (no second press) and captures BOTH metrics of amp 0.5 content:
-  // lufs ≈ −9.030, db_rms ≈ −9.031 (see golden math in the header).
-  feed_ragged(g, sine(0.3, 0.5));
-  REQUIRE(g.reference().valid);
-  CHECK(g.reference().lufs == Catch::Approx(-9.030).margin(0.06));
-  CHECK(g.reference().db_rms == Catch::Approx(-9.031).margin(0.06));
-  CHECK(g.mode() == GainMode::idle);  // FR-2: un-engaged until Adjust
-  CHECK_FALSE(g.flags().low_confidence);
+  // Emission covered every sample (no trap values at the tail).
+  for (std::size_t i = n - 11; i < n; ++i) CHECK(out[i] != -99.0f);
+
+  CHECK(g.delta_valid());
+  CHECK(g.applied_gain_db() == Approx(0.0).margin(0.01));
+  CHECK(g.delta_db() == Approx(0.0).margin(1e-9));
+  double worst = 0.0;
+  for (std::size_t i = settle; i < n; ++i)
+    worst = std::max(worst, std::abs(static_cast<double>(out[i])));
+  CHECK(worst < 0.01);
+  CHECK(g.flags().clamped == false);
+  CHECK(g.flags().no_signal_wet == false);
+  CHECK(g.flags().dry_tap_missing == false);
 }
 
-TEST_CASE(
-    "gain computer: READ over silence completes, sentinel −inf, flag "
-    "persists into use (R6b / FR-5a)") {
-  GainComputer g(kRate);
-  train(g, zeros(3.2));
-  REQUIRE(g.reference().valid);
-  // Silence in the window is a MEASURED reference — the B-metric
-  // contract says silence reads −inf: pinned here, never silently 0 dB.
-  CHECK(!std::isfinite(g.reference().lufs));
-  CHECK(!std::isfinite(g.reference().db_rms));
-  CHECK(g.flags().low_confidence);
+// ---------------------------------------------------------------------------
+// R-D2 — program dynamics pass: equal change in both taps, no gain move.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: program dynamics pass through (R-D2)") {
+  const std::size_t n1 = seconds(3.0);
+  const std::size_t n2 = seconds(1.0);
+  const std::size_t n = n1 + n2;
+  const auto dry = sine_1k(0.0, n);
+  // wet = same program, level drops 6 dB at t = 3.0 s (mid-program).
+  std::vector<float> wet = sine_1k(0.0, n1);
+  const auto tail = sine_1k(-6.0, n2);
+  wet.insert(wet.end(), tail.begin(), tail.end());
 
-  // The flag is a property of the current reference: it persists after
-  // the reference is put to work and clears only on a new READ. Engaging
-  // the silent record: target = −inf − live → beyond any clamp → −24 dB.
-  g.set_mode(GainMode::adjusting);
-  feed_ragged(g, sine(8.0, 1.0));
-  CHECK(g.flags().low_confidence);
-  CHECK(g.applied_gain_db() == Catch::Approx(-24.0).margin(0.06));
+  dsp::GainComputer g(kRate);
+  g.set_engaged(true);
+  std::vector<float> out;
+  feed(g, wet, dry, out, {13u, 1u, 479u});
 
-  // A fresh successful READ clears the flag (record replaced).
-  g.set_mode(GainMode::reading);
-  feed_ragged(g, sine(3.2, 1.0));
-  CHECK_FALSE(g.flags().low_confidence);
+  // Identical meters consume identical samples: the delta is exactly
+  // 0.0 through the level jump — the gain must not be fooled into
+  // chasing the transition (the retired leveler chased by design).
+  CHECK(g.delta_db() == Approx(0.0).margin(1e-9));
+  CHECK(g.applied_gain_db() == Approx(0.0).margin(0.01));
+  double worst = 0.0;
+  for (std::size_t i = n1; i < n; ++i)
+    worst = std::max(worst, std::abs(static_cast<double>(out[i])));
+  CHECK(worst < 0.05);
+  CHECK(g.flags().clamped == false);
 }
 
-TEST_CASE("gain computer: engage from IDLE proves at ~0 dB (R5)") {
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.5));  // reference = amp 0.5 program
+// ---------------------------------------------------------------------------
+// R-D3 — edit compensation: wet-only level changes are nulled.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: chain edits are compensated (R-D3)") {
+  // 3.0 s to fill the meter windows + 3.0 s ramp: settled value within
+  // the 0.05 margin of the target (1−e^{−10} ≈ 1.0).
+  const std::size_t n = seconds(6.0);
 
-  g.set_mode(GainMode::adjusting);
-  // FR-9/③ hold made precondition-explicit (owner review, 2026-10-22):
-  // feed a moment of silence FIRST so "no move" is asserted on a
-  // machine state that provably has a stale/no window — not on
-  // implementation-dependent initialization order.
-  feed_ragged(g, zeros(0.1));
-  CHECK(std::fabs(g.applied_gain_db()) <= 0.05);
-
-  // Identity property (FR-3 no-op): feeding the SAME program the
-  // reference was trained on settles the compensation at ≈ 0 dB,
-  // approached smoothly from 0. Zipper-freeness is proven per-sample by
-  // R3's trace equality; a step bound here would be a tautology.
-  feed_ragged(g, sine(8.0, 0.5));
-  CHECK(g.applied_gain_db() == Catch::Approx(0.0).margin(0.06));
-}
-
-TEST_CASE(
-    "gain computer: block invariance — identical applied-gain TRACES at "
-    "every 480-sample checkpoint, all chunkings (R3)") {
-  const std::vector<float> train_prog = sine(3.2, 0.5);
-  const std::vector<float> adj_prog = sine(6.0, 1.0);
-  // 320 checkpoints across READ + 600 across ADJUST (every 10 ms).
-  constexpr std::size_t kExpectedTrace = (153600 + 288000) / 480;
-
-  auto run = [&](std::size_t gran) {
-    GainComputer g(kRate);
-    std::vector<double> trace;
-    g.set_mode(GainMode::reading);
-    feed_fixed_traced(g, train_prog.data(), train_prog.size(), gran, 480,
-                      trace);
-    g.set_mode(GainMode::adjusting);
-    feed_fixed_traced(g, adj_prog.data(), adj_prog.size(), gran, 480, trace);
-    // Trace LENGTH may sit within one checkpoint of the arithmetic
-    // window (completion at ==3.0 s vs first-post-boundary evaluation —
-    // an off-by-one here is semantics timing, not a bug; the CONTENT
-    // comparison below is exact regardless).
-    REQUIRE(trace.size() >= kExpectedTrace - 1);
-    REQUIRE(trace.size() <= kExpectedTrace + 1);
-    return trace;
-  };
-
-  // Endpoint first (the R1 settled golden), then the FULL trajectories:
-  // the `1`, `7` (worst ragged) and `48000` (one call per second) traces
-  // must match the `480` reference trace ELEMENT-WISE over the whole run.
-  const auto base = run(480);
-  CHECK(base.back() == Catch::Approx(-6.02).margin(0.06));
-  check_traces_equal(run(1), base);
-  check_traces_equal(run(7), base);
-  check_traces_equal(run(48000), base);
-}
-
-TEST_CASE("gain computer: settling at ref − live; metric switch transparent "
-          "at the anchor (R1; R8 partial)") {
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.5));  // ref pair ≈ −9.03 both metrics
-
-  // Chain got 6.02 dB louder (amp 0.5 → 1.0): compensation settles at
-  // ref − live ≈ −6.02 dB of attenuation.
-  g.set_mode(GainMode::adjusting);
-  feed_ragged(g, sine(8.0, 1.0));  // > window + 5·tc: fully settled
-  CHECK(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-  CHECK_FALSE(g.flags().clamped);
-
-  // FR-8: switching metric re-targets instantly from the SAME record —
-  // the reference is untouched by the switch.
-  const auto ref_before = g.reference();
-  const double pre_switch = g.applied_gain_db();
-  g.set_metric(GainMetric::db_rms);
-  CHECK(g.reference().lufs == ref_before.lufs);  // untouched, FR-8
-  CHECK(g.reference().db_rms == ref_before.db_rms);
-  CHECK(g.reference().valid);
-
-  // Transparency at the anchor tone: both pairings coincide there (the
-  // PR-A B4 cross-tie), so the settled gain is the SAME value and the
-  // switch moment is invisible — no jump, no re-read, no reset.
-  feed_ragged(g, sine(2.0, 1.0));
-  CHECK(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-  CHECK(std::fabs(g.applied_gain_db() - pre_switch) <= 0.06);
-  CHECK_FALSE(g.flags().clamped);
-}
-
-TEST_CASE("gain computer: clamp at ±MaxComp with flag, both signs (R2)") {
-  // Deafen the training (~−29.03 dB ref), then the chain runs 26 dB
-  // louder → target ≈ −26 dB is beyond the +/− 24 bound: clamps to −24.
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.05));
-  g.set_mode(GainMode::adjusting);
-  const double step_lo = feed_ragged_tracked(g, sine(8.0, 1.0));
-  CHECK(g.flags().clamped);
-  CHECK(g.applied_gain_db() == Catch::Approx(-24.0).margin(0.06));
-  // The clamp successor still RAMPS: a direct jump to the bound would
-  // show as a ~24 dB move inside one ≤13-sample call (legit one-pole
-  // tops out ≈ 0.024 dB here). Zipper-freeness per stage lives in R3.
-  CHECK(step_lo < 0.1);
-
-  // Opposite sign: reference 24.98 dB LOUDER than the live chain →
-  // boost target ≈ +26 dB clamps at +24, still flagged, still ramped.
-  GainComputer g2(kRate);
-  train(g2, sine(3.2, 1.0));
-  g2.set_mode(GainMode::adjusting);
-  const double step_hi = feed_ragged_tracked(g2, sine(8.0, 0.02));
-  CHECK(g2.flags().clamped);
-  CHECK(g2.applied_gain_db() == Catch::Approx(24.0).margin(0.06));
-  CHECK(step_hi < 0.1);
-}
-
-TEST_CASE("gain computer: silence freezes the applied gain, then recovers "
-          "(R4 / FR-9)") {
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.5));
-  g.set_mode(GainMode::adjusting);
-  feed_ragged(g, sine(8.0, 1.0));
-  REQUIRE(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-
-  // 8 s of digital silence: the machine does NOT chase to zero, does NOT
-  // run away — the applied gain freezes at the last chasing value.
-  feed_ragged(g, zeros(8.0));
-  CHECK(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-
-  // Valid signal returns → the chase resumes to the same target.
-  feed_ragged(g, sine(8.0, 1.0));
-  CHECK(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-}
-
-TEST_CASE("gain computer: reference codec round-trip + forward compat (R7)") {
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.5));
-  const auto ref = g.reference();
-  const auto bytes = g.encode_reference();
-  REQUIRE(!bytes.empty());
-
-  // Byte-structure audit (same-host round-trip; the cross-endian
-  // guarantee is structural — shift-assembled little-endian, per the
-  // header contract — not executed across hosts). The version tag is
-  // referenced by constant, not literal (owner review): a future bump
-  // breaks the test linkage, never the decoding of old sessions.
-  REQUIRE(bytes.size() == 18);
-  CHECK(bytes[0] == GainComputer::kCodecVersion);
-
-  // Identity round-trip on a fresh machine.
-  GainComputer g2(kRate);
-  REQUIRE(g2.decode_reference(bytes.data(), bytes.size()));
-  CHECK(g2.reference().lufs == ref.lufs);
-  CHECK(g2.reference().db_rms == ref.db_rms);
-  CHECK(g2.reference().valid);
-
-  // Behavioral round-trip: the decoded machine compensates identically.
-  g2.set_mode(GainMode::adjusting);
-  feed_ragged(g2, sine(8.0, 1.0));
-  CHECK(g2.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-
-  // Forward compatibility: trailing bytes nobody knows are ignored.
-  auto with_tail = bytes;
-  with_tail.push_back(0xAB);
-  with_tail.push_back(0xCD);
-  GainComputer g3(kRate);
-  CHECK(g3.decode_reference(with_tail.data(), with_tail.size()));
-  CHECK(g3.reference().valid);
-
-  // Garbage is refused all-or-nothing: the already-valid reference of g3
-  // must be untouched by a failed decode. The junk pattern leads with
-  // 0x00 — version 0 is reserved-never-legal by the header contract, so
-  // this stays invalid across every future version bump (owner review:
-  // 0xEE-only junk would rot the day version 0xEE appears).
-  std::vector<std::uint8_t> junk(64);
-  for (std::size_t j = 0; j < junk.size(); ++j) {
-    junk[j] = (j % 2 == 0) ? 0x00 : 0xFF;
+  SECTION("wet 6 dB quieter than dry → +6 dB compensation") {
+    const auto dry = sine_1k(0.0, n);   // −3.0 LUFS
+    const auto wet = sine_1k(-6.0, n);  // −9.0 LUFS ⇒ delta −6 ⇒ +6
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
+    CHECK(g.delta_db() == Approx(-6.0).margin(0.05));
+    CHECK(g.applied_gain_db() == Approx(6.0).margin(0.05));
+    CHECK(g.flags().clamped == false);
   }
-  const auto before = g3.reference();
-  CHECK_FALSE(g3.decode_reference(junk.data(), junk.size()));
-  CHECK(g3.reference().lufs == before.lufs);
-  CHECK(g3.reference().db_rms == before.db_rms);
-
-  // Truncated header: refused.
-  CHECK_FALSE(g3.decode_reference(bytes.data(), 4));
+  SECTION("wet 6 dB louder than dry → −6 dB compensation") {
+    const auto dry = sine_1k(-6.0, n);
+    const auto wet = sine_1k(0.0, n);
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
+    CHECK(g.delta_db() == Approx(6.0).margin(0.05));
+    CHECK(g.applied_gain_db() == Approx(-6.0).margin(0.05));
+    CHECK(g.flags().clamped == false);
+  }
 }
 
-TEST_CASE("gain computer: per-sample applied-gain trajectory (PB2a)") {
-  // R-t1: the overload emits the ramp VALUE at every sample index — a
-  // monotone approach toward the target that ends exactly at the
-  // machine's own internal applied gain (no off-by-one between the
-  // emitted buffer and the machine state the tests already pin).
-  GainComputer g(kRate);
-  train(g, sine(3.2, 0.5));
-  g.set_mode(GainMode::adjusting);
-  const std::vector<float> adj = sine(8.0, 1.0);
-  std::vector<float> out(adj.size(), 0.0f);
-  static const std::size_t chunks[] = {7, 11, 13};
-  std::size_t i = 0;
-  std::size_t k = 0;
-  while (i < adj.size()) {
-    const std::size_t take = std::min(chunks[k % 3], adj.size() - i);
-    g.process(adj.data() + i, take, out.data() + i);
-    i += take;
-    ++k;
-  }
-  REQUIRE(g.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-  for (std::size_t j = 1; j < out.size(); ++j) {
-    // Monotone descent NOTE: valid only because this scenario chases
-    // DOWNWARD (ref −9.03 vs live −3.01 → target −6.02 from 0 dB). An
-    // upward chase mirrors the comparison (owner review: keep it
-    // prefix-tagged if this helper shape gets copied elsewhere).
-    if (out[j] > out[j - 1] + 1e-9) {
-      FAIL("trajectory breaks monotone descent at sample " << j
-           << ": " << out[j - 1] << " -> " << out[j]);
-      return;
-    }
-  }
-  CHECK(out.back() == Catch::Approx(g.applied_gain_db()).margin(1e-6));
+// ---------------------------------------------------------------------------
+// R-D4 — metric pairing: re-target from the running meters at the next
+// slot; the LoudnessMeter itself is the oracle (no hand K-weighting).
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: metric switch re-targets from the same meters (R-D4)") {
+  // Same settle arithmetic as R-D3: 3.0 s window fill + 3.0 s ramp.
+  const std::size_t n = seconds(6.0);
+  // Shelf-separated content: the K high shelf splits LUFS, unweighted
+  // dB RMS stays (nearly) equal — the pairing choice is visibly
+  // different without hand-computing filter math.
+  const auto dry = sine_at(1000.0, 0.0, n);
+  const auto wet = sine_at(6000.0, 0.0, n);
 
-  // R-t2: the EMITTED trajectory is chunk-invariant at EVERY SAMPLE
-  // (the R3 endpoint/trace property applied to the new output surface).
-  auto run_traj = [&](std::size_t gran) {
-    GainComputer gg(kRate);
-    train(gg, sine(3.2, 0.5));
-    gg.set_mode(GainMode::adjusting);
-    std::vector<float> trj(adj.size(), 0.0f);
-    std::size_t pos = 0;
-    while (pos < adj.size()) {
-      const std::size_t take = std::min(gran, adj.size() - pos);
-      gg.process(adj.data() + pos, take, trj.data() + pos);
-      pos += take;
-    }
-    REQUIRE(gg.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-    return trj;
-  };
-  const auto t4 = run_traj(4);
-  const auto t476 = run_traj(476);
-  for (std::size_t j = 0; j < t4.size(); ++j) {
-    if (std::fabs(t4[j] - t476[j]) > 1e-9) {
-      FAIL("emitted trajectories diverge at sample " << j << ": "
-           << t4[j] << " vs " << t476[j]);
-      return;
-    }
+  // Oracle: the same meter engine, same content, same window.
+  dsp::LoudnessMeter m_wet(kRate, 3.0);
+  dsp::LoudnessMeter m_dry(kRate, 3.0);
+  m_wet.process(wet.data(), n);
+  m_dry.process(dry.data(), n);
+  const auto s_wet = m_wet.snapshot();
+  const auto s_dry = m_dry.snapshot();
+  CHECK(s_wet.valid);
+  CHECK(s_dry.valid);
+  const double delta_lufs = s_wet.lufs - s_dry.lufs;
+  const double delta_rms = s_wet.db_rms - s_dry.db_rms;
+  CHECK(delta_rms == Approx(0.0).margin(0.1));  // RMS: equal by design
+  CHECK(delta_lufs > 0.5);                       // shelf region: 6 kHz louder
+
+  dsp::GainComputer g(kRate);
+  g.set_engaged(true);
+  std::vector<float> out;  // metric default = LUFS
+  feed(g, wet, dry, out, {479u, 13u});
+  CHECK(g.applied_gain_db() == Approx(-delta_lufs).margin(0.05));
+
+  // Switch to dB RMS: the next slot re-targets from the SAME running
+  // meters (the second feed runs the full 6 s scenario again; plenty).
+  g.set_metric(dsp::GainMetric::db_rms);
+  feed(g, wet, dry, out, {479u, 13u});
+  CHECK(g.applied_gain_db() == Approx(-delta_rms).margin(0.05));
+}
+
+// ---------------------------------------------------------------------------
+// R-D5 — clamp both signs (A2 default MaxComp 16 dB).
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: clamp at MaxComp with the flag (R-D5)") {
+  const std::size_t n = seconds(6.5);  // 3.0 fill + 3.5 ramp-decay
+
+  SECTION("target +24 clamps to +16") {
+    const auto dry = sine_1k(0.0, n);    // −3.0 LUFS
+    const auto wet = sine_1k(-24.0, n);  // −27.0 ⇒ delta −24 ⇒ target +24
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {479u});
+    CHECK(g.applied_gain_db() == Approx(16.0).margin(0.05));
+    CHECK(g.flags().clamped == true);
+  }
+  SECTION("target −24 clamps to −16") {
+    const auto dry = sine_1k(-24.0, n);
+    const auto wet = sine_1k(0.0, n);
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {479u});
+    CHECK(g.applied_gain_db() == Approx(-16.0).margin(0.05));
+    CHECK(g.flags().clamped == true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R-D6 — ramp: no slam on engage, one-pole closed form, ramp home on
+// disengage; the per-sample step bound is never exceeded.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: ramp properties on engage/disengage (R-D6)") {
+  const std::size_t settle = seconds(3.5);
+  const auto dry = sine_1k(0.0, seconds(9.5));    // −3.0 LUFS
+  const auto wet = sine_1k(-6.0, seconds(9.5));   // −9.0 ⇒ target +6
+
+  dsp::GainComputer g(kRate);  // NOT engaged: target stays 0, applied 0
+  std::vector<float> pre;
+  feed(g, wet, dry, pre, {7u, 1u, 479u, 13u});  // settle pre-engage
+  CHECK(g.applied_gain_db() == Approx(0.0).margin(0.01));
+
+  // Engage. The target takes over at the NEXT internal slot (≤ 100 ms),
+  // so the closed-form check tolerates a 0.4–0.5 s ramp-age window at
+  // the 0.5 s mark after the engage call.
+  g.set_engaged(true);
+  std::vector<float> out;
+  feed(g, wet, dry, out, {13u, 479u, 7u});  // exactly 3.0 s post-engage
+  const double alpha = 1.0 - std::exp(-1.0 / (kRate * 0.3));
+  const double lo = 6.0 * (1.0 - std::exp(-0.4 / 0.3));  // ramp-age 0.4 s
+  const double hi = 6.0 * (1.0 - std::exp(-0.5 / 0.3));  // ramp-age 0.5 s
+  const double at_half =
+      static_cast<double>(out.at(seconds(0.5) - 1));
+  CHECK(at_half >= Approx(lo).margin(0.3));
+  CHECK(at_half <= Approx(hi).margin(0.3));
+  // Fully settled by the end (≈ target; 1−e^{−9.7} ≈ 1).
+  CHECK(out.back() == Approx(6.0).margin(0.05));
+
+  // Step bound: the one-pole pace must hold at every sample.
+  double worst_step = 0.0;
+  for (std::size_t i = 1; i < out.size(); ++i)
+    worst_step = std::max(
+        worst_step, std::abs(static_cast<double>(out[i])
+                             - static_cast<double>(out[i - 1])));
+  CHECK(worst_step <= 6.0 * alpha + 1e-5);
+
+  // Disengage: ramp home (3.0 s: < 0.001 dB left of the decay).
+  g.set_engaged(false);
+  std::vector<float> home;
+  feed(g, wet, dry, home, {479u, 13u});  // exactly 3.0 s
+  CHECK(home.back() == Approx(0.0).margin(0.1));
+}
+
+// ---------------------------------------------------------------------------
+// R-D7 — hold: either-tap silence freezes the chase; flag streaks.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
+  SECTION("wet silence: gain frozen, no chase; streak lights past 5 s; clears") {
+    const std::size_t settle = seconds(5.0);  // done decaying by ~4.5 s
+    const auto dry = sine_1k(0.0, settle + seconds(2.2));
+
+    // Short silence first: below the 5 s streak, flag must stay dark.
+    std::vector<float> wet = sine_1k(-6.0, settle);
+    { const auto gap = digital_silence(seconds(2.2));
+      wet.insert(wet.end(), gap.begin(), gap.end()); }
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
+    CHECK(g.applied_gain_db() == Approx(6.0).margin(0.05));  // settled pre-silence
+    const double frozen = out.at(settle + seconds(0.7));
+    CHECK(frozen == Approx(6.0).margin(0.05));   // no chase into silence
+    CHECK(out.back() == Approx(6.0).margin(0.05));  // still held at the end
+    CHECK(g.flags().no_signal_wet == false);   // only 2.2 s < 5 s
+    CHECK(g.flags().dry_tap_missing == false); // dry never silent
+
+    // Long silence on a fresh engine: the streak must light. The dry
+    // tap spans the full scenario length (never silent).
+    std::vector<float> wet_long = sine_1k(-6.0, settle);
+    { const auto gap = digital_silence(seconds(5.4));
+      wet_long.insert(wet_long.end(), gap.begin(), gap.end()); }
+    dsp::GainComputer g2(kRate);
+    g2.set_engaged(true);
+    std::vector<float> out2;
+    const auto dry_long = sine_1k(0.0, settle + seconds(5.4));
+    feed(g2, wet_long, dry_long, out2, {479u, 13u});
+    CHECK(g2.flags().no_signal_wet == true);
+    CHECK(g2.flags().dry_tap_missing == false);
+    CHECK(g2.applied_gain_db() == Approx(6.0).margin(0.05));  // held, not reset
+    // Validity returns → the flag clears on the next slot.
+    std::vector<float> dry3 = sine_1k(0.0, seconds(0.5));
+    std::vector<float> wet3 = sine_1k(-6.0, seconds(0.5));
+    std::vector<float> out3;
+    feed(g2, wet3, dry3, out3, {13u});
+    CHECK(g2.flags().no_signal_wet == false);
   }
 
-  // R-t3: the overload is purely observational — a machine advanced
-  // with it must end EXACTLY where a machine advanced without it ends
-  // (and the emitted last sample is that same value, sample-aligned).
-  GainComputer ga(kRate);
-  GainComputer gb(kRate);
-  train(ga, sine(3.2, 0.5));
-  train(gb, sine(3.2, 0.5));
-  const std::vector<float> prog = sine(4.0, 1.0);
-  std::vector<float> scratch(prog.size(), 0.0f);
-  ga.set_mode(GainMode::adjusting);
-  gb.set_mode(GainMode::adjusting);
-  std::size_t pos = 0;
-  while (pos < prog.size()) {
-    const std::size_t take = std::min(std::size_t{64}, prog.size() - pos);
-    ga.process(prog.data() + pos, take, scratch.data() + pos);
-    gb.process(prog.data() + pos, take);
-    pos += take;
+  SECTION("aux silence: gain frozen; dry streak lights past 5 s; clears") {
+    const std::size_t settle = seconds(5.0);  // holds a settled +6
+    const std::size_t n = settle + seconds(5.4);  // streak > 5 s
+    const auto wet = sine_1k(-6.0, n);          // never silent
+    std::vector<float> dry = sine_1k(0.0, settle);
+    { const auto gap = digital_silence(seconds(5.4));
+      dry.insert(dry.end(), gap.begin(), gap.end()); }
+
+    dsp::GainComputer g(kRate);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
+    // Held where the settle left it — the gain neither chases nor drifts
+    // while the delta is invalid (this is the whole point of the hold).
+    const double frozen = out.at(settle + seconds(0.7));
+    CHECK(frozen == Approx(out.at(settle - 1)).margin(0.02));
+    CHECK(g.flags().dry_tap_missing == true);   // aux silent ≥ 5 s
+    CHECK(g.flags().no_signal_wet == false);
+    // Streak clears the moment real dry audio is back.
+    std::vector<float> dry5 = sine_1k(0.0, seconds(0.5));
+    std::vector<float> wet5 = sine_1k(-6.0, seconds(0.5));
+    std::vector<float> out5;
+    feed(g, wet5, dry5, out5, {13u});
+    CHECK(g.flags().dry_tap_missing == false);
   }
-  CHECK(ga.applied_gain_db() ==
-        Catch::Approx(gb.applied_gain_db()).epsilon(1e-12));
-  CHECK(gb.applied_gain_db() == Catch::Approx(-6.02).margin(0.06));
-  CHECK(scratch.back() ==
-        Catch::Approx(gb.applied_gain_db()).margin(1e-6));
 }
 
-TEST_CASE("gain computer: mid-READ transitions — abort, timer restart, "
-          "replace-at-completion (FR-2/FR-4/FR-5)") {
-  // Case A: engaging ADJUST mid-run ABORTS the run (header contract):
-  // no phantom capture from the half window, and with no prior
-  // reference the machine holds 0 dB — it cannot chase content it
-  // never captured.
-  GainComputer g(kRate);
-  g.set_mode(GainMode::reading);
-  feed_ragged(g, sine(1.0, 0.5));           // 1.0 s into the 3.0 s window
-  g.set_mode(GainMode::adjusting);          // engage → abort (FR-5)
-  feed_ragged(g, sine(8.0, 0.5));
-  CHECK_FALSE(g.reference().valid);         // no phantom completion
-  CHECK(g.mode() == GainMode::adjusting);
-  CHECK(g.applied_gain_db() == Catch::Approx(0.0).margin(0.06));
+// ---------------------------------------------------------------------------
+// R-D8 — chunk invariance at every sample (hold sits mid-trajectory).
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: chunk invariance of the emitted trajectory (R-D8)") {
+  const std::size_t a = seconds(3.0);
+  const std::size_t gap_n = seconds(0.5);
+  const std::size_t back_n = seconds(3.0);  // resume needs ramp room
+  const std::size_t n = a + gap_n + back_n;
+  std::vector<float> dry = sine_1k(0.0, n);
+  std::vector<float> wet = sine_1k(-6.0, a);
+  { const auto gap = digital_silence(gap_n); wet.insert(wet.end(), gap.begin(), gap.end()); }
+  { const auto back = sine_1k(-6.0, back_n); wet.insert(wet.end(), back.begin(), back.end()); }
 
-  // Case B: pressing READ again mid-run RESTARTS the window (FR-2/FR-4:
-  // a press is a press, its schedule resets). 3.0 s after the FIRST
-  // press must still NOT complete; the edge moved with the re-press.
-  g.set_mode(GainMode::reading);
-  feed_ragged(g, sine(1.0, 0.5));
-  g.set_mode(GainMode::reading);            // re-press: timer restarts NOW
-  feed_ragged(g, sine(2.0, 0.5));           // 3.0 s since the FIRST press
-  CHECK_FALSE(g.reference().valid);         // restart pushed the edge out
-  feed_ragged(g, sine(3.2, 0.5));           // full 3.0 s on the 2nd press
-  REQUIRE(g.reference().valid);
-  CHECK(g.reference().lufs == Catch::Approx(-9.030).margin(0.06));
+  dsp::GainComputer g_ragged(kRate);
+  g_ragged.set_engaged(true);
+  std::vector<float> out_ragged;
+  feed(g_ragged, wet, dry, out_ragged, {7u, 11u, 13u, 1u, 479u});
 
-  // Case C: a re-read replaces the record ONLY at completion — junk
-  // content fed to an aborted run leaves NO trace in the record.
-  GainComputer g2(kRate);
-  g2.set_mode(GainMode::reading);
-  feed_ragged(g2, sine(3.2, 0.5));          // trained on amp 0.5
-  g2.set_mode(GainMode::reading);           // re-read pressed
-  feed_ragged(g2, sine(2.0, 1.0));          // "wrong program" junk fed in
-  g2.set_mode(GainMode::adjusting);         // abort — junk never completes
-  g2.set_mode(GainMode::reading);           // re-read again: fresh window
-  feed_ragged(g2, sine(3.2, 0.5));          // completes on the clean program
-  REQUIRE(g2.reference().valid);
-  CHECK(g2.reference().lufs == Catch::Approx(-9.030).margin(0.06));
-  CHECK(g2.reference().db_rms == Catch::Approx(-9.031).margin(0.06));
+  dsp::GainComputer g_uniform(kRate);
+  g_uniform.set_engaged(true);
+  std::vector<float> out_uniform;
+  feed(g_uniform, wet, dry, out_uniform, {48000u});
+
+  // Bit-identical trajectories regardless of blocking — every sample,
+  // including through the silence hold and the resume.
+  CHECK(out_ragged == out_uniform);
+  CHECK(out_uniform.back() == Approx(6.0).margin(0.05));  // resumed
+}
+
+// ---------------------------------------------------------------------------
+// R-D9 — no memory beyond meters + parameters.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: re-engage repeats the compensation, nothing hidden (R-D9)") {
+  const std::size_t settle = seconds(5.0);              // fully settled first
+  const std::size_t recoup = seconds(3.0);              // ramp phase room
+  const std::size_t n = settle + 2 * recoup;
+  const auto wet = sine_1k(-6.0, n);
+  const auto dry = sine_1k(0.0, n);
+
+  dsp::GainComputer g(kRate);
+  g.set_engaged(true);
+  std::vector<float> out1;
+  feed(g, wet, dry, out1, {7u, 1u, 479u, 13u});  // settle phase:
+  const double first = g.applied_gain_db();
+  CHECK(first == Approx(6.0).margin(0.05));
+
+  g.set_engaged(false);
+  std::vector<float> out2;
+  feed(g, wet, dry, out2, {479u, 13u});  // 3.0 s ramp home
+  const double down = g.applied_gain_db();
+  CHECK(down == Approx(0.0).margin(0.1));
+
+  g.set_engaged(true);
+  std::vector<float> out3;
+  feed(g, wet, dry, out3, {479u, 13u});  // re-settle phase:
+  const double again = g.applied_gain_db();
+  CHECK(again == Approx(6.0).margin(0.05));
+  CHECK(g.delta_db() == Approx(-6.0).margin(0.05));  // unchanged by the cycle
 }
