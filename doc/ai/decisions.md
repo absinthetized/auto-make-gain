@@ -11,6 +11,8 @@
 
 | Date | Decision (one line) | Operative text lives in |
 |---|---|---|
+| 2026-10-22 | **Amendment A2**: internal-sidechain AGC adopted — one plugin, two stereo input pairs (wet main + dry aux), continuous gain = −delta(wet, dry), no training; aux bus mirrors the main's channel count (mono tracks get a mono aux on pin 2); Reaper JSFX TAP (stereo + mono variants) is optional over plain sidechain routing; SRC/DST two-instance pair over IPC evaluated and **rejected** | `MakeGain_FR-v1.md` §10; m1-plan re-scope (PR-B2/B3) |
+| 2026-10-22 | Host matrix: **GarageBand dropped** (AU exercise gate retires); AU build kept best-effort/unvalidated (same standing as the x86_64 lane); MaxComp default lowered 24 → 16 dB | `MakeGain_FR-v1.md` §10.5; m1-plan gates |
 | 2026-10-20 | PB1 (gain machine) commits landed on `main` via the owner's push after the agent worked on an unverified checked-out branch — **accepted as-is, no history rewrite, no retroactive PR**; formalized: verify the checked-out branch before every commit and at session start | AGENTS.md rule 6 (amendment); the branch `m1-wire-up` PR description names the residue |
 | 2026-10-20 | Docs estate reorganized: `doc/human/` vs `doc/ai/`, README navigation table, audience banners; humans review agent work in their editor (no diffs pasted in chat) | `README.md` docs map; AGENTS.md (cadence rules) |
 | 2026-10-20 | Docs ceremony commits sliced onto `m1-docs-reorg` PR so PR-B stays pure code | this branch's history |
@@ -32,5 +34,6 @@
 
 | Date | Retired | Superseded by |
 |---|---|---|
+| 2026-10-22 | Owner's interim ruling "B" — engagement-frozen makeup delta captured at each Activate (never committed; red planned, not written) — retracted the same day after the owner described the internal-sidechain delta model | 2026-10-22 Amendment A2 (`MakeGain_FR-v1.md` §10) |
 | 2026-10-17 | code-tour "current whenever the file map changes" | 2026-10-19 lean (milestone cadence) |
 | 2026-10-17 | "docs/ + functional_reqs/ + tech_specs/ layout" | 2026-10-20 `doc/` single-tree split |
