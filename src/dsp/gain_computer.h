@@ -138,6 +138,12 @@ class GainComputer {
   // no_signal streak (5.0 s = 50 slots, TS §9 ③).
   static constexpr double kSilenceMeanSq = 1e-12;
   static constexpr std::size_t kNoSignalSlots = 50;
+  // Codec version tag (first byte of every record). The tests reference
+  // THIS constant — never a literal — so a bump fails the test linkage
+  // instead of silently re-decoding old sessions. Version 0 is reserved
+  // and NEVER legal (decode rejects it on sight), which gives the junk
+  // case an all-future-proof invalid byte to test with.
+  static constexpr std::uint8_t kCodecVersion = 1;
 
  private:
   LoudnessMeter meter_;  // shared by READ capture and ADJUST measurement
