@@ -44,6 +44,13 @@ Binding for any AI/agent working in this repository:
    directly — a unit of work lands on a branch, the owner pushes the
    branch, opens and merges the PR. Agents never push or merge (rule 2
    above stays absolute). Details: `doc/ai/release-model.md`.
+   - **Branch verification (owner, 2026-10-20):** the agent verifies the
+     checked-out branch (`git branch --show-current`) at session start and
+     before every commit — file contents and `git log` prove nothing about
+     *where* a commit lands. Origin of the rule: five PR-B commits landed
+     on an unverified `main` during the 2026-10-20 tag ceremony; the owner
+     accepted them as-is (no rewrite, no retroactive PR) and ordered this
+     check formalized.
 7. **Comment standard (owner, 2026-10-17):** code must carry enough
    comments for a reader with **limited framework knowledge** (decent C++
    but *not* JUCE) to follow the process. Concretely, in addition to

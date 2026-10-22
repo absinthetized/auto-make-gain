@@ -11,6 +11,7 @@
 
 | Date | Decision (one line) | Operative text lives in |
 |---|---|---|
+| 2026-10-20 | PB1 (gain machine) commits landed on `main` via the owner's push after the agent worked on an unverified checked-out branch — **accepted as-is, no history rewrite, no retroactive PR**; formalized: verify the checked-out branch before every commit and at session start | AGENTS.md rule 6 (amendment); the branch `m1-wire-up` PR description names the residue |
 | 2026-10-20 | Docs estate reorganized: `doc/human/` vs `doc/ai/`, README navigation table, audience banners; humans review agent work in their editor (no diffs pasted in chat) | `README.md` docs map; AGENTS.md (cadence rules) |
 | 2026-10-20 | Docs ceremony commits sliced onto `m1-docs-reorg` PR so PR-B stays pure code | this branch's history |
 | 2026-10-19 | Ceremonies leaned: tags owner-only (agents never create/push, not even locally); CHANGELOG written at tag time; code-tour updated at milestone merges, not per-PR; **no** in-repo dependencies.md — dependencies of record = build.md §7 + `bootstrap.sh` | AGENTS.md rules 2+7; CHANGELOG.md header; build.md §7 |
