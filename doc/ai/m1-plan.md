@@ -247,6 +247,22 @@ engine. Of PR-B2's five landed commits (branch `m1-wire-up`):
   revisited only with proper heuristics.
 | PB2g | `docs: PR-B2 verification record + lanes` | this file | `docker-check.sh` arm64 + `--x64` on the branch; then push / PR-B2 (description names the main-landing residue) |
 
+**PR-B2 verification record (2026-10-22, branch tip `7388e06`):**
+
+- Lane arm64 native: ALL GREEN (configure+build+ctest, main+sanitizer
+  binaries) — evidence on the exact source bytes quoted in commits
+  `e1a949b` (engine) and `8aade8e` (wiring).
+- Lane amd64 (`--x64`, Rosetta-emulated): ALL GREEN same day, after the
+  last code change (three docs/jsfx commits touched no C++ since).
+- macOS native: built + installed (VST3/CLAP/AU Release, 22:11) — CLAP
+  needed a manual folder copy (clap-juce-extensions does not
+  auto-install it; note for the build.md sweep in PR-B3).
+- Reaper smoke A2: ✅ both topologies (2-track sends, 1-track TAP).
+- Commit-metric disclosure: branch is 12 commits (the plan budgeted
+  ~9–10; the delta = early TAP commit + two owner-ruling docs commits).
+  Squash-merge keeps the bisect story in the branch history.
+
+
 **PR-B3 (follow-up PR, M1 continuation):** stage-2 parameters (Metric,
 MaxComp default 16, ramp speed), the re-derived UI (FR-12 readouts,
 `clamped` / `no_signal` / `dry tap missing` flags, status line), Reaper
