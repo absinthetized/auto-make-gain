@@ -1,17 +1,24 @@
 #include "plugin/MakeGainProcessor.h"
+
 #include "ui/MakeGainEditor.h"
+
+#include <cmath>
 
 // (Framework-orientation comments live in the header file — lifecycle table,
 // entry-point chain; this cpp only repeats them where a call site needs them.)
 
 MakeGainProcessor::MakeGainProcessor()
     // BusesProperties declares our I/O channel "buses". A bus is a group of
-    // channels (mono, stereo, 5.1...). We want exactly one stereo input +
-    // one stereo output, and NO sidechain bus anywhere YET: the A2 aux
-    // input bus is declared in PB2f together with the delta-engine wiring.
+    // channels (mono, stereo, 5.1...). The A2 architecture needs TWO input
+    // buses: bus 0 = wet (the chain output at this insert point), bus 1 =
+    // the dry pre-chain tap. In Reaper terms, bus 1 lands on the track's
+    // sidechain channels (3/4 for stereo tracks, pin 2 for mono tracks).
+    // The aux bus STARTS disabled (last arg false): a host that has no side
+    // chain connected yet simply gives us silence instead of failing to load.
     : AudioProcessor (BusesProperties()
-           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+           .withInput  ("Input",         juce::AudioChannelSet::stereo(), true)
+           .withInput  ("Aux (dry tap)", juce::AudioChannelSet::stereo(), false)
+           .withOutput ("Output",        juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "STATE", createParameterLayout())
 {
     // In framework terms: APVTS parameters are looked up once here, by ID,
@@ -24,8 +31,7 @@ MakeGainProcessor::MakeGainProcessor()
 
 // Parameter layout — A2: Active only for now. The UX-Q4 rule stands: the
 // engage/bypass toggle is the one AUTOMATABLE parameter; Metric/MaxComp/
-// ramp-speed are UI-only parameters that arrive in PR-B3. (The old "read"
-// parameter retired with the training FSM — Amendment A2.)
+// ramp-speed are UI-only parameters that arrive in PR-B3.
 juce::AudioProcessorValueTreeState::ParameterLayout
 MakeGainProcessor::createParameterLayout()
 {
@@ -40,8 +46,30 @@ MakeGainProcessor::createParameterLayout()
     return layout;
 }
 
-void MakeGainProcessor::prepareToPlay (double, int) {}
-void MakeGainProcessor::releaseResources() {}
+void MakeGainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+{
+    // The engine (and its meters) is rate-fixed: recreate on a rate change,
+    // or on first prepare. Restarting playback with an unchanged rate keeps
+    // the engine — including its running meters' calibration — untouched.
+    if (machine == nullptr || machineRate != sampleRate)
+    {
+        machineRate = sampleRate;
+        machine = std::make_unique<makegain::dsp::GainComputer> (sampleRate);
+    }
+    // Engagement follows the persisted Active parameter at prepare time.
+    machine->set_engaged (activeParam->load() > 0.5f);
+
+    // Scratch buffers: 2 mono-sum lanes + 1 gain lane, block-length wide.
+    // Allocation happens HERE (non-audio time), never in processBlock.
+    workBuf.setSize (3, juce::jmax (1, samplesPerBlock), false, true, true);
+    workBuf.clear();
+}
+
+void MakeGainProcessor::releaseResources()
+{
+    // Keep the engine: a host may merely pause playback. The scratch buffer
+    // is resized by the next prepareToPlay anyway.
+}
 
 void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
@@ -50,28 +78,101 @@ void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     // classic source of mystery CPU spikes in plugins. Cheap and always on.
     juce::ScopedNoDenormals noDenormals;
 
-    const auto numIn  = getTotalNumInputChannels();
-    const auto numOut = getTotalNumOutputChannels();
+    // Bus shapes. Per the A2 bus rule the aux mirrors the main's count;
+    // isBusesLayoutSupported guarantees it — but a host may present the aux
+    // bus DISABLED (no sidechain connect yet): then auxIn == 0 and we feed
+    // the engine digital silence on that tap. The hold gate does the rest:
+    // no compensation until a real dry tap exists (dry_tap_missing after
+    // 5 s), and NO slam either way (this is the structural ear-safety of
+    // the A2 model — the old reference regime could boost from silence).
+    const int mainIn = getChannelCountOfBus (true, 0);
+    const int auxIn  = getChannelCountOfBus (true, 1);
+    const int outCh  = getChannelCountOfBus (false, 0);
+    const int n = buffer.getNumSamples();
+    if (n <= 0 || machine == nullptr)
+        return;
 
-    // Passthrough semantics (PB2e-red build): when the host's bus layout
-    // matches what we declared in the constructor, JUCE hands us ONE buffer
-    // whose channels carry the input data — leaving them untouched IS
-    // passing the audio through. We must only silence channels we receive
-    // no data for, because output channels are our responsibility.
-    for (int ch = numIn; ch < numOut; ++ch)
-        buffer.clear (ch, 0, buffer.getNumSamples());
+    auto* wetSum = workBuf.getWritePointer (0);
+    auto* drySum = workBuf.getWritePointer (1);
+    auto* gainDb = workBuf.getWritePointer (2);
+
+    // Bus channel → flat buffer index mapping. In framework terms: the
+    // processBlock buffer interleaves ALL input buses back to back; JUCE
+    // exposes the arithmetic so we never hard-code "stereo = 2 channels".
+    const int main0 = getChannelIndexInProcessBlockBuffer (true, 0, 0);
+    const int aux0  = (auxIn > 0) ? getChannelIndexInProcessBlockBuffer (true, 1, 0) : -1;
+
+    // Mono sums per sample (both buses fold the same way; a mono bus is
+    // its own sum). The engine deliberately sees ONLY the mono sums —
+    // channel count never reaches the DSP (UX-Q5).
+    for (int s = 0; s < n; ++s)
+    {
+        double w = 0.0, d = 0.0;
+        for (int c = 0; c < mainIn; ++c)
+            w += static_cast<double> (buffer.getSample (main0 + c, s));
+        wetSum[s] = static_cast<float> (w / static_cast<double> (mainIn));
+        if (aux0 >= 0)
+        {
+            for (int c = 0; c < auxIn; ++c)
+                d += static_cast<double> (buffer.getSample (aux0 + c, s));
+            drySum[s] = static_cast<float> (d / static_cast<double> (auxIn));
+        }
+        else
+            drySum[s] = 0.0f;  // aux bus present but disabled = silence
+    }
+
+    // Parameter crossing: the Active button only flips a bool on the
+    // engine; ramping toward/from the new target is the engine's own
+    // per-sample job (no click either way — FR §10.3).
+    machine->set_engaged (activeParam->load() > 0.5f);
+
+    // The engine folds BOTH taps' metering + ramp into one call and emits
+    // the applied gain in dB after each sample's ramp step.
+    machine->process (wetSum, drySum, static_cast<std::size_t> (n), gainDb);
+
+    // Apply: every output channel gets the SAME per-sample gain (the A2
+    // gain is stereo-correlated by design — it nulls a chain-induced
+    // delta, not channel imbalances). dB → linear once per sample, then
+    // multiplied into all channels: the expensive pow() runs n times, not
+    // n × channels. Inputs and outputs share buffer indices (in-place);
+    // the aux channels live beyond the output range, read-only here.
+    for (int s = 0; s < n; ++s)
+    {
+        const float lin = static_cast<float> (
+            std::pow (10.0, static_cast<double> (gainDb[s]) / 20.0));
+        for (int c = 0; c < outCh; ++c)
+            buffer.setSample (c, s, buffer.getSample (c, s) * lin);
+    }
+
+    // Status handoff for the editor (reads of doubles/bools into atomics).
+    const auto flags = machine->flags();
+    uiClamped.store (flags.clamped);
+    uiNoSignalWet.store (flags.no_signal_wet);
+    uiDryTapMissing.store (flags.dry_tap_missing);
 }
 
 bool MakeGainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    // The host may propose: stereo→stereo, mono→mono, or weird asymmetric
-    // pairs (mono-in→stereo-out etc). We accept only symmetric, ≤stereo
-    // pairs; anything else must show as "not supported" so the host grays
-    // the bad routings out instead of misbehaving at runtime.
-    const auto& in  = layouts.getMainInputChannelSet();
-    const auto& out = layouts.getMainOutputChannelSet();
-    return in == out && (in == juce::AudioChannelSet::stereo()
-                      || in == juce::AudioChannelSet::mono());
+    // The host may propose layouts for each named bus. A2 bus rule:
+    //   out   == main input (mono→mono, stereo→stereo)
+    //   aux   == main input channel count (mono main ⇒ mono aux)
+    // Reject anything else so the host grays bad routings out instead of
+    // misbehaving at runtime.
+    const auto& main = layouts.getMainInputChannelSet();
+    const auto& out  = layouts.getMainOutputChannelSet();
+    if (main != out
+        || (main != juce::AudioChannelSet::mono()
+            && main != juce::AudioChannelSet::stereo()))
+        return false;
+
+    const auto aux = layouts.getChannelSet (true, 1);
+    // The host may also simply NOT give us an aux (disabled bus = invalid
+    // channel set / empty): that is the "dry tap missing" regime, which
+    // must load — the hold gate makes it safe (gain stays put).
+    if (!aux.isDisabled() && aux != main)
+        return false;
+
+    return true;
 }
 
 juce::AudioProcessorEditor* MakeGainProcessor::createEditor()
@@ -120,4 +221,26 @@ void MakeGainProcessor::setStateInformation (const void* data, int sizeInBytes)
     auto restored = juce::ValueTree::fromXml (*xml);
     if (restored.isValid())
         apvts.replaceState (restored);
+}
+
+// ---------------------------------------------------------------------------
+// Editor status (PB2f): one honest line about the current engine state.
+// The real readout panel (FR §10.6: chain delta, applied gain, flags as
+// labeled states) arrives with the re-derived UI in PR-B3.
+// ---------------------------------------------------------------------------
+const juce::String MakeGainProcessor::statusLine() const
+{
+    if (machine == nullptr || activeParam->load() <= 0.5f)
+        return "standby \u2014 engaged when Active is on";
+
+    const auto wetFlag  = uiNoSignalWet.load();
+    const auto dryFlag  = uiDryTapMissing.load();
+    const auto clamped  = uiClamped.load();
+
+    if (dryFlag)
+        return "AGC engaged \u00b7 dry tap missing (check aux routing)";
+    if (wetFlag)
+        return "AGC engaged \u00b7 no wet signal";
+    return juce::String ("AGC engaged") + (clamped ? " \u00b7 clamped at MaxComp"
+                                                   : " \u00b7 tracking");
 }

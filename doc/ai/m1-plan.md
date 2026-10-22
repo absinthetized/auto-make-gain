@@ -224,15 +224,35 @@ engine. Of PR-B2's five landed commits (branch `m1-wire-up`):
 | A2 | `docs: FR amendment A2 + decisions + M1 re-scope` | `MakeGain_FR-v1.md`, `decisions.md`, this file | owner eyeball (docs only) |
 | PB2e-r | `tests(red): delta-engine spec R-D1..R-D9 + honest stub` — gain_computer rewritten to a stub; new tests for the delta engine (spec rows below) | `src/dsp/gain_computer.{h,cpp}` (in-place rewrite), `tests/dsp/gain_computer_test.cpp` | owner reviews assertions; red output quoted |
 | PB2e-g | `dsp(green): delta engine — dual-meter AGC, hold, clamp, ramp, emitter` | same (+ TS delta-engine spec note in `MakeGain_TS-v0.1.md` §9) | ALL GREEN quoted |
-| PB2f | `plugin: aux-bus wiring — second stereo input bus, wet/dry mono sums, Active-AGC` | `MakeGainProcessor.{h,cpp}`, `MakeGainEditor.cpp` (status text), `CMakeLists.txt` | **mac Reaper smoke A2**: TAP first in chain, Apply last; edit-compensation with program-dynamics pass-through; toggle; tap-loss fallback (silence the aux); **mono-track case with TapMono** (mono main = mono aux, pin 2) |
+| PB2f | `plugin: aux-bus wiring — second stereo input bus, wet/dry mono sums, Active-AGC` | `MakeGainProcessor.{h,cpp}`, `MakeGainEditor.{h,cpp}` (status line + 4 Hz refresh), no CMake change needed | **mac Reaper smoke A2**: TAP first in chain, Apply last; edit-compensation with program-dynamics pass-through; toggle; tap-loss fallback (silence the aux); **mono-track case with TapMono** (mono main = mono aux, pin 2) |
+
+**PB2f smoke record (owner session 2026-10-22, mac Reaper arm64):**
+
+- ✅ 2-track send setup (SOURCE no-FX → WET 1/2 + 3/4 pre-FX/pre-fader,
+  SOURCE master send off): duck compensation works, dry-tap-missing flag
+  proven during routing debug (aux feed absent → flag lit as specced).
+- ✅ 1-track TAP setup (`MakeGainTap` as FIRST FX, MakeGain LAST, no
+  sends): duck compensation works. Files: repo `jsfx/`, installed to the
+  Reaper user effects folder.
+- Finding, no action (owner): 1-track-without-TAP is impossible in
+  stock Reaper (sends tap post-FX; self-feed is a feedback loop) — the
+  aux-bus design + optional Tap covers 1-track workflows. Portability
+  answer per host: generic aux bus everywhere + host-specific
+  convenience (Reaper Tap; Ardour sidechain-from-track-input to be
+  verified in the §6.10 gate).
+- ⏳ Still open on the smoke: Active-toggle ramp-home, mono-track case,
+  first-Activate-no-aux calm (spot-checked in routing debug: no-spike
+  behavior held). Owner ruling: latency feel (ramp 300 ms / window 3 s)
+  postponed — the PR-B3 Ramp parameter makes it tunable, defaults
+  revisited only with proper heuristics.
 | PB2g | `docs: PR-B2 verification record + lanes` | this file | `docker-check.sh` arm64 + `--x64` on the branch; then push / PR-B2 (description names the main-landing residue) |
 
 **PR-B3 (follow-up PR, M1 continuation):** stage-2 parameters (Metric,
 MaxComp default 16, ramp speed), the re-derived UI (FR-12 readouts,
-`clamped` / `no_signal` / `dry tap missing` flags, status line), the
-shipped TAP files (stereo + mono variants), Reaper smoke B/C, and the
-remaining M1 gate: **Ardour re-test incl. the parked CLAP checklist
-(§6.10)**.
+`clamped` / `no_signal` / `dry tap missing` flags, status line), Reaper
+smoke B/C, and the remaining M1 gate: **Ardour re-test incl. the parked
+CLAP checklist (§6.10)**. *(The TAP JSFX files shipped early — PR-B2,
+jsfx commit — because the owner's 1-track smoke needed them.)*
 
 **Amended M1 exit gates (A2):** mac Reaper compensation + meters sane;
 Asahi pen-transfer re-test; Ardour retest incl. CLAP. *(GarageBand AU

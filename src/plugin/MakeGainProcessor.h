@@ -1,9 +1,18 @@
 // MakeGainProcessor.h — the plugin's host-facing shell.
 //
-// PB2e-red state: the A2 amendment retired the training FSM, so the old
-// GainComputer wiring is removed HERE as well — this build is an honest
-// passthrough while the delta engine is only a tested stub. The aux-bus
-// declaration and the full AGC wiring return in PB2f.
+// PB2f state: the A2 architecture is wired — ONE plugin, TWO input
+// buses (FR §10.1):
+//
+//   bus 0 "Input"       — the wet signal (post-chain, at this plugin's
+//                         position in the chain)
+//   bus 1 "Aux (dry tap)" — the pre-chain dry tap, routed by the host
+//                         (Reaper channel 3/4 feed or the shipped TAP)
+//
+// The bus rule (A2, UX-Q5): the aux bus mirrors the MAIN's channel
+// count — a mono track gets a mono main + a mono aux (pin 2 in
+// Reaper), a stereo track gets stereo main + stereo aux (pins 3/4).
+// The engine itself is channel-count agnostic: both buses are folded
+// to mono sums here before feeding the GainComputer.
 //
 // JUCE orientation (what this file is, in framework terms):
 //
@@ -31,6 +40,9 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <atomic>
+#include <memory>
+
+#include "dsp/gain_computer.h"
 
 class MakeGainProcessor : public juce::AudioProcessor
 {
@@ -64,13 +76,21 @@ public:
 
     // --- host configuration negotiation ---
     // Before the host fixes our channel layout it offers candidates; we
-    // accept exactly stereo-in→stereo-out (and the mono pair). The two
-    // stereo input pairs of the A2 architecture arrive in PB2f.
+    // accept exactly what the A2 bus rule allows:
+    //   output == main input (mono→mono or stereo→stereo), and the aux
+    //   input mirrors the MAIN's channel count (mono main ⇒ mono aux).
+    // Anything else (asymmetric pairs, 3+ channel sets) is rejected so the
+    // host grays the bad routings out instead of misbehaving at runtime.
     bool isBusesLayoutSupported (const BusesLayout&) const override;
 
     // FR-22 (A2-narrowed): parameter state only.
     void getStateInformation (juce::MemoryBlock&) override;
     void setStateInformation (const void*, int) override;
+
+    // Status snapshot for the editor (PB2f: one status line; the real
+    // readout panel arrives in PR-B3). Reads ONLY atomics — legal from
+    // the message thread while audio runs.
+    const juce::String statusLine() const;
 
 private:
     // Parameter layout — the single source of parameter IDs for the whole
@@ -87,6 +107,22 @@ private:
         { *this, nullptr, "STATE", createParameterLayout() };
 
     std::atomic<float>* activeParam = nullptr;
+
+    // The A2 delta engine. Unique pointer (not member) because the sample
+    // rate is only known at prepareToPlay: the engine owns two meters that
+    // are rate-fixed, so a rate change means a fresh engine (FR-6's
+    // per-rate K-weighting, now inside the meters).
+    std::unique_ptr<makegain::dsp::GainComputer> machine;
+    double machineRate = 0.0;
+
+    // Scratch: mono sums of each bus + the applied-gain dB trajectory.
+    // Allocated once in prepareToPlay; processBlock never allocates.
+    juce::AudioBuffer<float> workBuf;
+
+    // UI-facing atomics, written on the audio thread each block.
+    std::atomic<bool> uiClamped { false };
+    std::atomic<bool> uiNoSignalWet { false };
+    std::atomic<bool> uiDryTapMissing { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainProcessor)
 };
