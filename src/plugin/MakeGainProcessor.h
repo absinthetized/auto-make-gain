@@ -92,6 +92,17 @@ public:
     // the message thread while audio runs.
     const juce::String statusLine() const;
 
+    double uiAppliedDb() const { return uiAppliedDb_.load (std::memory_order_relaxed); }
+    double uiDeltaDb()  const { return uiDeltaDb_.load (std::memory_order_relaxed); }
+    bool   uiDeltaValid() const { return uiDeltaValid_.load (std::memory_order_relaxed); }
+
+    // Editor-only access to the parameter tree (attachments bind here).
+    juce::AudioProcessorValueTreeState& getApvts() { return apvts; }
+
+    // Stage-2 parameter crossing: APVTS atomics → engine setters; called
+    // on prepareToPlay and every processBlock (audio thread).
+    void crossParameters();
+
 private:
     // Parameter layout — the single source of parameter IDs for the whole
     // plugin (APVTS owns the params; the editor attaches to them).
@@ -107,6 +118,9 @@ private:
         { *this, nullptr, "STATE", createParameterLayout() };
 
     std::atomic<float>* activeParam = nullptr;
+    std::atomic<float>* metricParam  = nullptr;   // 0 = LUFS, 1 = dB RMS
+    std::atomic<float>* maxcompParam = nullptr;   // 0..48 dB
+    std::atomic<float>* ramptcParam  = nullptr;   // seconds
 
     // The A2 delta engine. Unique pointer (not member) because the sample
     // rate is only known at prepareToPlay: the engine owns two meters that
@@ -123,6 +137,9 @@ private:
     std::atomic<bool> uiClamped { false };
     std::atomic<bool> uiNoSignalWet { false };
     std::atomic<bool> uiDryTapMissing { false };
+    std::atomic<bool>  uiDeltaValid_ { false };
+    std::atomic<double> uiAppliedDb_ { 0.0 };   // applied gain readout (FR §10.6)
+    std::atomic<double> uiDeltaDb_ { 0.0 };     // chain delta readout
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainProcessor)
 };
