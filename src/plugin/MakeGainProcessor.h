@@ -92,6 +92,10 @@ public:
     // the message thread while audio runs.
     const juce::String statusLine() const;
 
+    // Stage-2 parameter crossing: APVTS atomics → engine setters; called
+    // on prepareToPlay and every processBlock (audio thread).
+    void crossParameters();
+
 private:
     // Parameter layout — the single source of parameter IDs for the whole
     // plugin (APVTS owns the params; the editor attaches to them).
@@ -107,6 +111,9 @@ private:
         { *this, nullptr, "STATE", createParameterLayout() };
 
     std::atomic<float>* activeParam = nullptr;
+    std::atomic<float>* metricParam  = nullptr;   // 0 = LUFS, 1 = dB RMS
+    std::atomic<float>* maxcompParam = nullptr;   // 0..48 dB
+    std::atomic<float>* ramptcParam  = nullptr;   // seconds
 
     // The A2 delta engine. Unique pointer (not member) because the sample
     // rate is only known at prepareToPlay: the engine owns two meters that
