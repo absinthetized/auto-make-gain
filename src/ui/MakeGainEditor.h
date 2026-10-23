@@ -11,15 +11,15 @@
 // Rules of the separation (JUCE shows no mercy):
 //   * The UI thread must NEVER touch audio internals synchronously, and
 //     the audio thread must never wait on the UI. They talk through
-//     thread-safe channels: the processor's status atomics (PB2f) and
-//     APVTS parameters (PR-B3).
+//     thread-safe channels: the processor's status atomics and the
+//     APVTS parameter objects (attachments).
 //   * The editor is disposable: hosts destroy/recreate it freely (window
 //     close/reopen, project reload). The processor survives.
 //
-// PB2f stub UI: a fixed-size dark window with a title band and one live
-// status line (Timer-polled from the processor's atomics, 250 ms). The
-// re-derived A2 readout panel (chain delta, applied gain, labeled flags)
-// arrives in PR-B3.
+// PR-B3 UI (the re-derived A2 panel, FR §10.6): three real controls
+// (Metric combo, MaxComp + Ramp rotaries, APVTS attachments — no manual
+// parameter plumbing), readouts painted from processor atomics on a
+// Timer (chain delta + applied gain), and the honest status line.
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -32,20 +32,42 @@ class MakeGainEditor : public juce::AudioProcessorEditor,
 public:
     explicit MakeGainEditor (MakeGainProcessor& p);
 
-    // AudioProcessorEditor's minimal required customization: we draw the
-    // whole window ourselves in paint() (custom-component style). The
-    // constructor's setSize() defines the plugin window's default size.
+    // Full-window custom paint: dark theme + the text readouts (their
+    // strings refresh from the processor's atomics in timerCallback).
     void paint (juce::Graphics&) override;
+    void resized() override;   // control layout (sliders/combo boxes)
 
 private:
-    // Timer: repaint at 4 Hz so the status line reflects the engine's
-    // state (engaged / clamped / tap-loss) without audio-thread work:
-    // paint() only reads the processor's atomics.
-    void timerCallback() override;
+    void timerCallback() override;   // refresh readout strings + repaint
 
     // Reference (not pointer!): editors are destroyed with their processor
     // in well-behaved hosts; JUCE's leak detector flags dangling UI state.
     MakeGainProcessor& processorRef;
+
+    // Controls (message thread; APVTS attachments do the plumbing).
+    // Active: the ONE automatable parameter (UX-Q4) — a big toggle so the
+    // plugin is fully drivable from its own panel, no "generic UI" detour.
+    juce::ToggleButton activeButton { "Active" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+        activeAttach;
+
+    // Metric: a two-position switch (owner feedback: "not a dropdown").
+    // The APVTS parameter stays a choice (index 0 = LUFS, 1 = dB RMS) for
+    // host compatibility; the button maps its on/off state to that index.
+    juce::ToggleButton metricSwitch;
+    juce::Label metricCaption { {}, "metric" };
+
+    juce::Slider maxcompSlider { juce::Slider::RotaryHorizontalVerticalDrag,
+                                 juce::Slider::TextBoxBelow };
+    juce::Slider ramptcSlider { juce::Slider::RotaryHorizontalVerticalDrag,
+                                juce::Slider::TextBoxBelow };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
+        maxcompAttach, ramptcAttach;
+
+    // Readout strings refreshed by the Timer, drawn in paint(). The gauge
+    // captions are constants (owner feedback: unlabeled numbers are
+    // meaningless) and stay in paint().
+    juce::String appliedText, deltaText;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainEditor)
 };

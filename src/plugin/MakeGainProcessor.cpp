@@ -167,11 +167,14 @@ void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             buffer.setSample (c, s, buffer.getSample (c, s) * lin);
     }
 
-    // Status handoff for the editor (reads of doubles/bools into atomics).
+    // Status handoff for the editor (reads into atomics, editor polls).
     const auto flags = machine->flags();
     uiClamped.store (flags.clamped);
     uiNoSignalWet.store (flags.no_signal_wet);
     uiDryTapMissing.store (flags.dry_tap_missing);
+    uiDeltaValid_.store (machine->delta_valid());
+    uiAppliedDb_.store (machine->applied_gain_db());
+    uiDeltaDb_.store (machine->delta_db());
 }
 
 bool MakeGainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -270,16 +273,16 @@ void MakeGainProcessor::crossParameters()
 const juce::String MakeGainProcessor::statusLine() const
 {
     if (machine == nullptr || activeParam->load() <= 0.5f)
-        return "standby \u2014 engaged when Active is on";
+        return "standby - compensation engages when Active is on";
 
     const auto wetFlag  = uiNoSignalWet.load();
     const auto dryFlag  = uiDryTapMissing.load();
     const auto clamped  = uiClamped.load();
 
     if (dryFlag)
-        return "AGC engaged \u00b7 dry tap missing (check aux routing)";
+        return "AGC engaged - dry tap missing (check aux routing)";
     if (wetFlag)
-        return "AGC engaged \u00b7 no wet signal";
-    return juce::String ("AGC engaged") + (clamped ? " \u00b7 clamped at MaxComp"
-                                                   : " \u00b7 tracking");
+        return "AGC engaged - no wet signal";
+    return juce::String ("AGC engaged") + (clamped ? " - clamped at MaxComp"
+                                                   : " - tracking");
 }
