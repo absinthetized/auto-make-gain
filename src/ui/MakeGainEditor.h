@@ -69,5 +69,10 @@ private:
     // meaningless) and stay in paint().
     juce::String appliedText, deltaText;
 
+    // Delta caption carries the ACTIVE metric's unit (owner 2026-10-23:
+    // a LUFS-scale delta displayed as "dB" confused scale with signal
+    // change). Refreshed with the readouts.
+    juce::String deltaCaption { "CHAIN DELTA" };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainEditor)
 };

@@ -58,16 +58,18 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
 void MakeGainEditor::timerCallback()
 {
     const bool valid = processorRef.uiDeltaValid();
+    const bool rms = processorRef.getApvts()
+                         .getRawParameterValue ("metric")->load() > 0.5f;
 
     appliedText = juce::String (processorRef.uiAppliedDb(), 1) + " dB";
     deltaText   = valid
-        ? "chain delta " + juce::String (processorRef.uiDeltaDb(), 1) + " dB"
+        ? "chain delta " + juce::String (processorRef.uiDeltaDb(), 1)
+              + (rms ? " dB" : " LU")
         : "chain delta - no full window yet";
+    deltaCaption = rms ? "CHAIN DELTA (dB RMS)" : "CHAIN DELTA (LUFS)";
 
     // Reflect the metric parameter onto the switch (activity made on the
     // parameter side — session reload, our own click — both land here).
-    const bool rms = processorRef.getApvts()
-                         .getRawParameterValue ("metric")->load() > 0.5f;
     if (rms != metricSwitch.getToggleState())
         metricSwitch.setToggleState (rms, juce::dontSendNotification);
     metricSwitch.setButtonText (rms ? "dB RMS" : "LUFS");
@@ -109,7 +111,7 @@ void MakeGainEditor::paint (juce::Graphics& g)
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
-    g.drawText ("CHAIN DELTA", readouts.removeFromTop (16),
+    g.drawText (deltaCaption, readouts.removeFromTop (16),
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (14.0f));
     g.setColour (juce::Colour (0xffc8d2e6));
