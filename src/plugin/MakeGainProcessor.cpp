@@ -62,7 +62,7 @@ MakeGainProcessor::createParameterLayout()
 
     auto ramptc = std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "ramptc", 1 }, "Ramp tc",
-        juce::NormalisableRange<float> (0.05f, 3.0f, 0.01f, 0.7f),
+        juce::NormalisableRange<float> (0.01f, 3.0f, 0.01f, 0.7f),
         (float) makegain::dsp::GainComputer::kDefaultRampTcSec,
         juce::AudioParameterFloatAttributes().withAutomatable (false));
     layout.add (std::move (ramptc));
