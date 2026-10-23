@@ -16,6 +16,10 @@ desc:MakeGain Tap (stereo) — copies channels 1/2 into 3/4 as the pre-chain dry
 //
 // Reaper notes: writing lanes 3/4 auto-raises the track's channel count.
 // On a MONO track use "MakeGainTap Mono" instead (copies 1 → 2).
+// JSFX sample registers are 0-BASED: spl0 = channel 1 — so "channels
+// 3 and 4" are spl2 and spl3. (First smoke found the hard way: writing
+// spl3/spl4 shifts the dry copy one lane right and the plugin reads a
+// half-power aux = a constant −3 dB compensation.)
 // Misroute warning (documented): feeding the stereo aux ONE dry channel
 // reads −6 dB and overcompensates — hard-panned aux content is legal,
 // so the plugin will not detect/correct that for you.
@@ -28,5 +32,5 @@ out_pin:dry L
 out_pin:dry R
 
 @sample
-spl3 = spl0;
-spl4 = spl1;
+spl2 = spl0;   // 0-based: spl2 = channel 3, spl3 = channel 4
+spl3 = spl1;
