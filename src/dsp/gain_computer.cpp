@@ -161,4 +161,27 @@ bool GainComputer::delta_valid() const {
   return wet_meter_.snapshot().valid && dry_meter_.snapshot().valid;
 }
 
+// ---------------------------------------------------------------------------
+// A3 (PR-C) red stubs — store-and-nothing-else by design (AGENTS.md rule 8:
+// the tests R-F1..R-F8 cannot be satisfied by these on purpose; the green
+// commit replaces these definitions with the real behavior).
+// ---------------------------------------------------------------------------
+void GainComputer::set_meter_window(double seconds)
+{
+  meter_window_ = seconds;
+}
+
+void GainComputer::set_frozen(bool frozen) { frozen_ = frozen; }
+
+bool GainComputer::frozen() const { return frozen_; }
+
+void GainComputer::set_meter_hp(bool enabled, double hz)
+{
+  meter_hp_enabled_ = enabled;
+  meter_hp_hz_ = hz;
+}
+
+double GainComputer::wet_loudness_db() const { return 0.0; }
+double GainComputer::dry_loudness_db() const { return 0.0; }
+
 }  // namespace makegain::dsp

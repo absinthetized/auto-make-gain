@@ -73,6 +73,22 @@ class GainComputer {
   // to 0 dB from wherever the applied gain currently is.
   void set_engaged(bool engaged);
 
+  // -- A3 (PR-C) RED STUBS — compiled against the owner-approved spec
+  // (tests/dsp/gain_computer_test.cpp R-F1..R-F8); they cannot satisfy
+  // the assertions yet by construction:
+  //   set_meter_window: stores the number, meters keep the fixed window
+  //   set_frozen:       stores a flag, nothing is locked
+  //   set_meter_hp:     stores two numbers, no filtering exists
+  //   wet/dry loudness: return the 0.0 sentinel (never a real reading)
+  void set_meter_window(double seconds);  // FR-23 (S = 3.0 default, M = 0.4)
+  void set_frozen(bool frozen);           // FR-24
+  bool frozen() const;
+  void set_meter_hp(bool enabled, double hz);  // FR-26 (fixed 24 dB/oct)
+  // Per-tap loudness readouts (FR §10.6 lists wet + dry loudness; PR-C
+  // exposes them through the processor for the UI).
+  double wet_loudness_db() const;
+  double dry_loudness_db() const;
+
   // -- audio thread -----------------------------------------------------
   // Feed BOTH mono sums (wet, dry) and advance over `count` samples; any
   // block size (ragged, huge, zero) is safe; the per-sample ramp math is
@@ -118,6 +134,12 @@ class GainComputer {
 
   GainMetric metric_ = GainMetric::lufs;
   bool engaged_ = false;
+
+  // A3 RED-stub state (members only; no behavior glued yet).
+  bool frozen_ = false;
+  double meter_window_ = kMeterWindowSec;
+  bool meter_hp_enabled_ = false;
+  double meter_hp_hz_ = 150.0;
 
   double sample_rate_ = 0.0;
   double max_comp_db_ = kDefaultMaxCompDb;
