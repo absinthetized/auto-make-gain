@@ -8,48 +8,57 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
     : AudioProcessorEditor (&p),
       processorRef (p)
 {
-    setSize (440, 360);
+    setSize (468, 400);
     setResizable (false, false);
 
     auto& apvts = processorRef.getApvts();
 
-    // Active: a ButtonAttachment binds a toggle button to a bool parameter
-    // in framework terms — user clicks land on the parameter, host-side
-    // automation/persistence lands back on the button. Fully automatic.
+    // Attached toggles (bool parameters: ButtonAttachment does both
+    // directions — user click to parameter, host persistence to button).
     addAndMakeVisible (activeButton);
-    activeButton.setButtonText ("Active");
+    addAndMakeVisible (freezeButton);
+    addAndMakeVisible (mtrhpButton);
     activeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         apvts, "active", activeButton);
+    freezeAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        apvts, "freeze", freezeButton);
+    mtrhpAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        apvts, "mtrhp", mtrhpButton);
 
-    // Metric switch: no stock attachment type maps a 2-choice parameter to
-    // a toggle button (attachments are bool-only), so this glue is manual:
-    //   click   -> write the choice index (0/1) into the parameter tree,
-    //   timer   -> reflect the parameter's value back onto the button.
-    metricSwitch.setToggleState (false, juce::dontSendNotification);
+    // Manual glue for the two 2-choice parameters (Metric, Response).
+    // A 2-choice APVTS parameter stores its selection as a normalized
+    // 0/1; this switch forwards clicks 0/1 and the timer reflects the
+    // storage's latest value back onto the button (both directions see
+    // host automation/persistence without a dedicated attachment type).
     metricSwitch.onClick = [this]
     {
-        auto* metricParam = processorRef.getApvts().getParameter ("metric");
-        // setValueNotifyingHost in framework terms: change the value AND
-        // tell the host, so session persistence + gesture recording agree.
-        metricParam->setValueNotifyingHost (metricSwitch.getToggleState() ? 1.0f : 0.0f);
+        processorRef.getApvts().getParameter ("metric")
+             ->setValueNotifyingHost (metricSwitch.getToggleState() ? 1.0f
+                                                                    : 0.0f);
+    };
+    responseSwitch.onClick = [this]
+    {
+        processorRef.getApvts().getParameter ("response")
+             ->setValueNotifyingHost (responseSwitch.getToggleState() ? 1.0f
+                                                                      : 0.0f);
     };
     addAndMakeVisible (metricSwitch);
-    addAndMakeVisible (metricCaption);
-    metricCaption.setJustificationType (juce::Justification::centred);
-    metricCaption.setColour (juce::Label::textColourId, juce::Colour (0xff8a9099));
-    metricCaption.setFont (juce::FontOptions (13.0f));
+    addAndMakeVisible (responseSwitch);
 
-    // MaxComp + Ramp tc rotaries. SliderAttachment is the same deal as the
-    // Active button: parameter <-> control, both directions, no manual
-    // plumbing. Range/skew come from the parameter's NormalisableRange.
+    // The three rotaries (SliderAttachment = parameter <-> control in
+    // both directions; range/skew come from the NormalisableRange).
     maxcompSlider.setTextValueSuffix (" dB");
     ramptcSlider.setTextValueSuffix (" s");
+    mtrhphzSlider.setTextValueSuffix (" Hz");
     addAndMakeVisible (maxcompSlider);
     addAndMakeVisible (ramptcSlider);
+    addAndMakeVisible (mtrhphzSlider);
     maxcompAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         apvts, "maxcomp", maxcompSlider);
     ramptcAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         apvts, "ramptc", ramptcSlider);
+    mtrhphzAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        apvts, "mtrhphz", mtrhphzSlider);
 
     // 10 Hz readout refresh: atomics only, no locks, no audio-thread work.
     startTimerHz (10);
@@ -60,32 +69,50 @@ void MakeGainEditor::timerCallback()
     const bool valid = processorRef.uiDeltaValid();
     const bool rms = processorRef.getApvts()
                          .getRawParameterValue ("metric")->load() > 0.5f;
+    const bool fast = processorRef.getApvts()
+                          .getRawParameterValue ("response")->load() > 0.5f;
 
     appliedText = juce::String (processorRef.uiAppliedDb(), 1) + " dB";
     deltaText   = valid
         ? "chain delta " + juce::String (processorRef.uiDeltaDb(), 1)
               + (rms ? " dB" : " LU")
         : "chain delta - no full window yet";
-    deltaCaption = rms ? "CHAIN DELTA (dB RMS)" : "CHAIN DELTA (LUFS)";
+    metricCaption = rms ? "CHAIN DELTA (dB RMS)" : "CHAIN DELTA (LUFS)";
 
-    // Reflect the metric parameter onto the switch (activity made on the
-    // parameter side — session reload, our own click — both land here).
+    // Reflect the two choice parameters onto their switches (activity
+    // made on the parameter side — session reload, our own click —
+    // both land here; toggles without a notify callback stay inert).
     if (rms != metricSwitch.getToggleState())
         metricSwitch.setToggleState (rms, juce::dontSendNotification);
     metricSwitch.setButtonText (rms ? "dB RMS" : "LUFS");
+    if (fast != responseSwitch.getToggleState())
+        responseSwitch.setToggleState (fast, juce::dontSendNotification);
+    responseSwitch.setButtonText (fast ? "FAST" : "SHORT");
 
     repaint();
 }
 
 void MakeGainEditor::resized()
 {
-    // Control row, below the painted readout band. The two toggle buttons
-    // get generous rectangles; the rotaries get the rest.
-    activeButton.setBounds    (14, 186, 80, 60);
-    metricSwitch.setBounds    (104, 186, 80, 60);
-    maxcompSlider.setBounds   (192, 180, 112, 88);
-    ramptcSlider.setBounds    (312, 180, 112, 88);
-    metricCaption.setBounds   (100, 268, 88, 18);
+    // Button row: the five engagement/mode toggles share one strip.
+    const int bw = (468 - 28) / 5;
+    int x = 14;
+    auto placeButton = [&x, bw] (juce::Component& c)
+    {
+        c.setBounds (x, 134, bw, 54);
+        x += bw;
+    };
+    placeButton (activeButton);
+    placeButton (metricSwitch);
+    placeButton (responseSwitch);
+    placeButton (freezeButton);
+    placeButton (mtrhpButton);
+
+    // Rotary row: MaxComp / Ramp tc / Meter-HP frequency. Widths match
+    // the painted captions in paint() (three equal columns).
+    maxcompSlider.setBounds (14, 196, 144, 92);
+    ramptcSlider.setBounds (162, 196, 144, 92);
+    mtrhphzSlider.setBounds (310, 196, 144, 92);
 }
 
 void MakeGainEditor::paint (juce::Graphics& g)
@@ -111,26 +138,28 @@ void MakeGainEditor::paint (juce::Graphics& g)
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
-    g.drawText (deltaCaption, readouts.removeFromTop (16),
+    g.drawText (metricCaption, readouts.removeFromTop (16),
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (14.0f));
     g.setColour (juce::Colour (0xffc8d2e6));
     g.drawText (deltaText, readouts, juce::Justification::centred);
 
-    // Knob captions (rotaries carry their own value in the text box, but
-    // the NAME lives here).
+    // Control captions. Toggle buttons carry their own labels; the
+    // rotaries need name + unit captions here.
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
-    g.drawText ("MAXCOMP", juce::Rectangle<int> { 192, 268, 112, 18 },
+    g.drawText ("MAXCOMP", juce::Rectangle<int> { 14, 290, 144, 16 },
                 juce::Justification::centred);
-    g.drawText ("RAMP TC", juce::Rectangle<int> { 312, 268, 112, 18 },
+    g.drawText ("RAMP TC", juce::Rectangle<int> { 162, 290, 144, 16 },
                 juce::Justification::centred);
-    g.drawText ("AUTOMATABLE", juce::Rectangle<int> { 14, 246, 80, 18 },
+    g.drawText ("MTR HP FREQ", juce::Rectangle<int> { 310, 290, 144, 16 },
+                juce::Justification::centred);
+    g.drawText ("AUTOMATABLE", juce::Rectangle<int> { 14, 120, 84, 12 },
                 juce::Justification::centred);
 
     // Status bar: a dedicated, differently-colored strip at the bottom
-    // (owner feedback: status is not a control, it should not look like
-    // one). The processor composes the string from engine state.
+    // (owner feedback: status is not a control). The processor composes
+    // the string from engine state — freeze reports FIRST (FR-24).
     auto statusStrip = getLocalBounds().removeFromBottom (32);
     g.setColour (juce::Colour (0xff263238));   // distinct blue-grey band
     g.fillRect (statusStrip);

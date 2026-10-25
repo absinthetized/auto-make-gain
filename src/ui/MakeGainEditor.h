@@ -16,10 +16,10 @@
 //   * The editor is disposable: hosts destroy/recreate it freely (window
 //     close/reopen, project reload). The processor survives.
 //
-// PR-B3 UI (the re-derived A2 panel, FR §10.6): three real controls
-// (Metric combo, MaxComp + Ramp rotaries, APVTS attachments — no manual
-// parameter plumbing), readouts painted from processor atomics on a
-// Timer (chain delta + applied gain), and the honest status line.
+// PR-C panel (A3): five toggles (Active, Metric switch, Freeze, Meter
+// HP + the Response switch), three rotaries (MaxComp, Ramp tc, Meter
+// HP freq), readouts (applied gain + chain delta + per-tap loudness)
+// and the honest status bar.
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -35,7 +35,7 @@ public:
     // Full-window custom paint: dark theme + the text readouts (their
     // strings refresh from the processor's atomics in timerCallback).
     void paint (juce::Graphics&) override;
-    void resized() override;   // control layout (sliders/combo boxes)
+    void resized() override;   // control layout (buttons + rotaries)
 
 private:
     void timerCallback() override;   // refresh readout strings + repaint
@@ -44,35 +44,34 @@ private:
     // in well-behaved hosts; JUCE's leak detector flags dangling UI state.
     MakeGainProcessor& processorRef;
 
-    // Controls (message thread; APVTS attachments do the plumbing).
-    // Active: the ONE automatable parameter (UX-Q4) — a big toggle so the
-    // plugin is fully drivable from its own panel, no "generic UI" detour.
-    juce::ToggleButton activeButton { "Active" };
+    // Attached buttons (bool parameters: ButtonAttachment does both
+    // directions — user click to parameter, persistence to button).
+    juce::ToggleButton activeButton { "Active" };   // THE automatable param
+    juce::ToggleButton freezeButton { "Freeze" };   // FR-24 static lock
+    juce::ToggleButton mtrhpButton { "Meter HP" };  // FR-26 enable
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-        activeAttach;
+        activeAttach, freezeAttach, mtrhpAttach;
 
-    // Metric: a two-position switch (owner feedback: "not a dropdown").
-    // The APVTS parameter stays a choice (index 0 = LUFS, 1 = dB RMS) for
-    // host compatibility; the button maps its on/off state to that index.
-    juce::ToggleButton metricSwitch;
-    juce::Label metricCaption { {}, "metric" };
+    // Switch buttons over 2-choice parameters (no attachment type maps
+    // choice→button, so the glue is manual both ways — see timerCallback
+    // and the on-click capture in the constructor).
+    juce::ToggleButton metricSwitch;    // LUFS (S) / dB RMS
+    juce::ToggleButton responseSwitch;  // Short (3 s) / Fast (0.4 s)
 
+    // The three rotaries: compensation strength, ramp feel, metering HP
+    // corner. Range/skew come from the APVTS NormalisableRange.
     juce::Slider maxcompSlider { juce::Slider::RotaryHorizontalVerticalDrag,
                                  juce::Slider::TextBoxBelow };
     juce::Slider ramptcSlider { juce::Slider::RotaryHorizontalVerticalDrag,
                                 juce::Slider::TextBoxBelow };
+    juce::Slider mtrhphzSlider { juce::Slider::RotaryHorizontalVerticalDrag,
+                                 juce::Slider::TextBoxBelow };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-        maxcompAttach, ramptcAttach;
+        maxcompAttach, ramptcAttach, mtrhphzAttach;
 
-    // Readout strings refreshed by the Timer, drawn in paint(). The gauge
-    // captions are constants (owner feedback: unlabeled numbers are
-    // meaningless) and stay in paint().
+    // Readout strings refreshed by the Timer, drawn in paint().
     juce::String appliedText, deltaText;
-
-    // Delta caption carries the ACTIVE metric's unit (owner 2026-10-23:
-    // a LUFS-scale delta displayed as "dB" confused scale with signal
-    // change). Refreshed with the readouts.
-    juce::String deltaCaption { "CHAIN DELTA" };
+    juce::String metricCaption { "CHAIN DELTA" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainEditor)
 };
