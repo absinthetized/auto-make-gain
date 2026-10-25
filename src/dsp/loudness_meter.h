@@ -34,7 +34,11 @@ struct LoudnessSnapshot {
 };
 
 class LoudnessMeter {
-public:
+ public:
+  // `window_seconds` fixes the capacity: the ring ALWAYS reserves the
+  // max window (A3: 3.0 s) plus the open slot, so `set_window` later
+  // re-aims the span at runtime with zero allocation (FR-23's Short ↔
+  // Fast switch happens through a parameter cross on the audio thread).
   LoudnessMeter(double sample_rate, double window_seconds);
 
   // Feed mono audio, any block size; does NOT modify the input. Real-time
@@ -46,7 +50,14 @@ public:
   // sums, never a recount of the window.
   LoudnessSnapshot snapshot() const;
 
-private:
+  // Runtime window re-aim (A3 FR-23): changes ONLY the aggregation span
+  // (ring capacity is fixed at construction). Allocation-free, guarded
+  // cheap enough to call per block; clamped to [0.1, 3.0] s. Validity
+  // re-evaluates against the new span: shrinking restores validity from
+  // the existing history, growing waits for the span to fill (honest).
+  void set_window(double seconds);
+
+ private:
   // One 100 ms accumulation slot. A complete node holds an exact
   // sum of squares over exactly `sub_samples_` samples.
   struct Node {
@@ -55,6 +66,9 @@ private:
     uint64_t count = 0;
   };
 
+  // Largest span the capacity is reserved for (A3: Short = 3 s).
+  static constexpr double kMaxWindowSec = 3.0;
+
   KWeighting kweight_;
   std::vector<Node> ring_;   // circular, oldest→newest implicit via index
   std::vector<float> scratch_; // sub-block-sized buffer for K-weighting
@@ -62,6 +76,7 @@ private:
   uint64_t window_samples_ = 0;
   uint64_t sub_samples_ = 0;
   uint64_t fed_ = 0;           // total samples ever fed (validity check)
+  double sample_rate_ = 0.0;   // kept for set_window's span arithmetic
 };
 
 } // namespace makegain::dsp

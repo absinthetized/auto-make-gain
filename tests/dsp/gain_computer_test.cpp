@@ -614,8 +614,9 @@ TEST_CASE("gain computer: Fast settles far sooner than Short (R-F4)") {
 // R-F5 — metering HP at its own cutoff: −3 dB insertion (Butterworth
 // flatness point), measured through the engine's per-tap loudness
 // readout (oracle = the engine itself, no hand-rolled weighting).
+// Content length 4.0 s > the 3 s meter window: snapshots must be VALID.
 TEST_CASE("gain computer: meter HP reads -3 dB at cutoff (R-F5)") {
-  const std::size_t n = seconds(2.5);
+  const std::size_t n = seconds(4.0);
   const std::vector<float> tone = sine_at(150.0, 0.0, n);
   const std::vector<float> silence(n, 0.0f);
 
@@ -634,7 +635,10 @@ TEST_CASE("gain computer: meter HP reads -3 dB at cutoff (R-F5)") {
 // R-F6 — the slope is 24 dB/oct: one octave BELOW cutoff, the passed
 // energy drops ~24 dB (12 dB/oct would read ~half of that).
 TEST_CASE("gain computer: meter HP slope is 24 dB/oct (R-F6)") {
-  const std::size_t n = seconds(2.5);
+  // One octave BELOW cutoff (75 Hz at fc = 150): 4th-order Butterworth
+  // attenuates about -24.09 dB; a 12 dB/oct would leave about -12 (half).
+  // Content 4.0 s > the meter window so the readouts are valid.
+  const std::size_t n = seconds(4.0);
   const std::vector<float> tone = sine_at(75.0, 0.0, n);
   const std::vector<float> silence(n, 0.0f);
 
@@ -647,7 +651,7 @@ TEST_CASE("gain computer: meter HP slope is 24 dB/oct (R-F6)") {
   feed(g_on, tone, silence, out2, {479u, 13u});
 
   const double loss = g_on.wet_loudness_db() - g_off.wet_loudness_db();
-  CHECK(loss < -60.0);   // ≈ −24 dB + far-below-cutoff content ≈ inaudible floor
+  CHECK(loss == Approx(-24.0).margin(1.5));   // ≈ −24.1 dB, far from −12
 }
 
 // R-F7 — symmetric filtering of equal taps stays EXACTLY zero: the
