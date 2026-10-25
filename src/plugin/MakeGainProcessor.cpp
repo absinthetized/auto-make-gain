@@ -27,11 +27,16 @@ MakeGainProcessor::MakeGainProcessor()
     // any parameter change). Editor-side code never touches these raw
     // pointers; it attaches to the parameter objects instead (PR-B3).
     activeParam = apvts.getRawParameterValue ("active");
+    metricParam  = apvts.getRawParameterValue ("metric");
+    maxcompParam = apvts.getRawParameterValue ("maxcomp");
+    ramptcParam  = apvts.getRawParameterValue ("ramptc");
 }
 
-// Parameter layout — A2: Active only for now. The UX-Q4 rule stands: the
-// engage/bypass toggle is the one AUTOMATABLE parameter; Metric/MaxComp/
-// ramp-speed are UI-only parameters that arrive in PR-B3.
+// Parameter layout (PR-B3, stage 2). UX-Q4 stands: Active is the ONLY
+// automatable parameter; Metric / MaxComp / Ramp are UI-only toggles
+// (setIsAutomatable(false)) — they still persist with the session via
+// the APVTS (FR-22, A2-narrowed: parameters only). Defaults: LUFS,
+// MaxComp 16 dB (A2 default, range 0–48), ramp 300 ms (FR-5).
 juce::AudioProcessorValueTreeState::ParameterLayout
 MakeGainProcessor::createParameterLayout()
 {
@@ -43,21 +48,39 @@ MakeGainProcessor::createParameterLayout()
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "active", 1 }, "Active", false));
 
+    auto metric = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "metric", 1 }, "Metric",
+        juce::StringArray { "LUFS (K-weighted)", "dB RMS (unweighted)" }, 0,
+        juce::AudioParameterChoiceAttributes().withAutomatable (false));
+    layout.add (std::move (metric));
+
+    auto maxcomp = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "maxcomp", 1 }, "MaxComp",
+        juce::NormalisableRange<float> (0.0f, 48.0f, 0.1f), 16.0f,
+        juce::AudioParameterFloatAttributes().withAutomatable (false));
+    layout.add (std::move (maxcomp));
+
+    auto ramptc = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "ramptc", 1 }, "Ramp tc",
+        juce::NormalisableRange<float> (0.01f, 3.0f, 0.01f, 0.7f),
+        (float) makegain::dsp::GainComputer::kDefaultRampTcSec,
+        juce::AudioParameterFloatAttributes().withAutomatable (false));
+    layout.add (std::move (ramptc));
+
     return layout;
 }
 
 void MakeGainProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // The engine (and its meters) is rate-fixed: recreate on a rate change,
-    // or on first prepare. Restarting playback with an unchanged rate keeps
-    // the engine — including its running meters' calibration — untouched.
+    // Engagement + the stage-2 parameters cross into the engine here too:
+    // a fresh engine must reflect the (possibly persisted) parameter state
+    // even before the first processBlock arrives.
     if (machine == nullptr || machineRate != sampleRate)
     {
         machineRate = sampleRate;
         machine = std::make_unique<makegain::dsp::GainComputer> (sampleRate);
     }
-    // Engagement follows the persisted Active parameter at prepare time.
-    machine->set_engaged (activeParam->load() > 0.5f);
+    crossParameters();
 
     // Scratch buffers: 2 mono-sum lanes + 1 gain lane, block-length wide.
     // Allocation happens HERE (non-audio time), never in processBlock.
@@ -121,10 +144,10 @@ void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             drySum[s] = 0.0f;  // aux bus present but disabled = silence
     }
 
-    // Parameter crossing: the Active button only flips a bool on the
-    // engine; ramping toward/from the new target is the engine's own
-    // per-sample job (no click either way — FR §10.3).
-    machine->set_engaged (activeParam->load() > 0.5f);
+    // Parameter crossing (every block, audio thread, atomics only): the
+    // setters are allocation-free pointer stores; ramping toward the new
+    // target is the engine's own per-sample job (no click — FR §10.3).
+    crossParameters();
 
     // The engine folds BOTH taps' metering + ramp into one call and emits
     // the applied gain in dB after each sample's ramp step.
@@ -144,11 +167,14 @@ void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             buffer.setSample (c, s, buffer.getSample (c, s) * lin);
     }
 
-    // Status handoff for the editor (reads of doubles/bools into atomics).
+    // Status handoff for the editor (reads into atomics, editor polls).
     const auto flags = machine->flags();
     uiClamped.store (flags.clamped);
     uiNoSignalWet.store (flags.no_signal_wet);
     uiDryTapMissing.store (flags.dry_tap_missing);
+    uiDeltaValid_.store (machine->delta_valid());
+    uiAppliedDb_.store (machine->applied_gain_db());
+    uiDeltaDb_.store (machine->delta_db());
 }
 
 bool MakeGainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -228,19 +254,35 @@ void MakeGainProcessor::setStateInformation (const void* data, int sizeInBytes)
 // The real readout panel (FR §10.6: chain delta, applied gain, flags as
 // labeled states) arrives with the re-derived UI in PR-B3.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Stage-2 parameter crossing (PR-B3): the APVTS atomics are the single
+// thread-safe channel between the message thread (APVTS sliders, host
+// persistence) and the audio thread (engine setters). Called on prepare
+// and every processBlock — no caching, the stores are pointer writes.
+// ---------------------------------------------------------------------------
+void MakeGainProcessor::crossParameters()
+{
+    machine->set_engaged (activeParam->load() > 0.5f);
+    machine->set_metric (metricParam->load() > 0.5f
+                             ? makegain::dsp::GainMetric::db_rms
+                             : makegain::dsp::GainMetric::lufs);
+    machine->set_max_comp_db ((double) maxcompParam->load());
+    machine->set_ramp_tc ((double) ramptcParam->load());
+}
+
 const juce::String MakeGainProcessor::statusLine() const
 {
     if (machine == nullptr || activeParam->load() <= 0.5f)
-        return "standby \u2014 engaged when Active is on";
+        return "standby - compensation engages when Active is on";
 
     const auto wetFlag  = uiNoSignalWet.load();
     const auto dryFlag  = uiDryTapMissing.load();
     const auto clamped  = uiClamped.load();
 
     if (dryFlag)
-        return "AGC engaged \u00b7 dry tap missing (check aux routing)";
+        return "AGC engaged - dry tap missing (check aux routing)";
     if (wetFlag)
-        return "AGC engaged \u00b7 no wet signal";
-    return juce::String ("AGC engaged") + (clamped ? " \u00b7 clamped at MaxComp"
-                                                   : " \u00b7 tracking");
+        return "AGC engaged - no wet signal";
+    return juce::String ("AGC engaged") + (clamped ? " - clamped at MaxComp"
+                                                   : " - tracking");
 }

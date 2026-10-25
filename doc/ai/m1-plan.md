@@ -274,7 +274,37 @@ jsfx commit — because the owner's 1-track smoke needed them.)*
 Asahi pen-transfer re-test; Ardour retest incl. CLAP. *(GarageBand AU
 exercise retired by A2.)*
 
+**PB3 gate (BLOCKING, owner bug report 2026-10-22 evening): −3 dB on the
+engaged unity path.** Symptom: engaged → signal −3.0 dB; host bypass →
++3 back; repro with MakeGain the only FX in the chain. Analysis so far
+(code re-read on `m1-unity-fix`): the apply path cannot attenuate at
+applied = 0 dB (literal ×1.0; engine R-D1 pins identical-taps ⇒ delta
+exactly 0), so the delta engine is being fed DIFFERENT tap content
+while both meters read valid. Prime suspect: a nonzero HOLD — a stale
+3/4 feed (old two-track send) went silent → freeze kept an old applied
+value forever (hold semantics keep `target = applied` indefinitely);
+owner's −3 dB ≈ an earlier real compensation frozen in. Investigation
+plan (branch `m1-unity-fix`): (1) owner bisect answers — status line in
+engaged vs bypass, fresh-track no-TAP/no-sends repro, topology used;
+(2) depending on answers: either a hold-liveness rule (option to drop
+to 0 dB when a tap goes missing? owner decision — anti-chase vs
+stuck-gain) or a wiring-only fix. No param spec red until unity path
+is clean.
+
+**RESOLUTION (2026-10-23):** root cause found — the TAP JSFX wrote
+`spl3/spl4`; JSFX sample registers are 0-BASED, so that is lanes 4/5,
+and the aux lanes 3/4 read (silence, wet-L) = half power ⇒ dry tap
+−3 dB ⇒ the engine dutifully compensated −3. The plugin was right;
+the copied content was offset one lane. Fix:
+`spl2 = spl0; spl3 = spl1` (the mono variant was already correct;
+`spl1 = spl0`). Owner re-test after the fix: −3 dB gone, transparent
+on engage; pin-UI confusion during the test was a window-resize
+artifact, not code. Lesson recorded: `tracking` can mask a dead aux
+lane while the fold reads "valid + half-power" — deferred hardening
+candidate: a status hint on aux-lane asymmetry (display only, never
+auto-act).
 **Delta-engine spec rows (pin targets for PB2e-r; owner reviews):**
+
 
 - **R-D1** null invariant: dry == wet (identical streams) → target ≈ 0,
   applied stays 0 while engaged.
