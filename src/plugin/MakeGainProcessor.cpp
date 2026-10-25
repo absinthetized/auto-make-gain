@@ -30,6 +30,10 @@ MakeGainProcessor::MakeGainProcessor()
     metricParam  = apvts.getRawParameterValue ("metric");
     maxcompParam = apvts.getRawParameterValue ("maxcomp");
     ramptcParam  = apvts.getRawParameterValue ("ramptc");
+    responseParam = apvts.getRawParameterValue ("response");
+    freezeParam   = apvts.getRawParameterValue ("freeze");
+    mtrhpParam    = apvts.getRawParameterValue ("mtrhp");
+    mtrhphzParam  = apvts.getRawParameterValue ("mtrhphz");
 }
 
 // Parameter layout (PR-B3, stage 2). UX-Q4 stands: Active is the ONLY
@@ -66,6 +70,28 @@ MakeGainProcessor::createParameterLayout()
         (float) makegain::dsp::GainComputer::kDefaultRampTcSec,
         juce::AudioParameterFloatAttributes().withAutomatable (false));
     layout.add (std::move (ramptc));
+
+    auto response = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "response", 1 }, "Response",
+        juce::StringArray { "Short (3 s)", "Fast (0.4 s)" }, 0,
+        juce::AudioParameterChoiceAttributes().withAutomatable (false));
+    layout.add (std::move (response));
+
+    auto freeze = std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "freeze", 1 }, "Freeze", false,
+        juce::AudioParameterBoolAttributes().withAutomatable (false));
+    layout.add (std::move (freeze));
+
+    auto mtrhp = std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "mtrhp", 1 }, "Meter HP", false,
+        juce::AudioParameterBoolAttributes().withAutomatable (false));
+    layout.add (std::move (mtrhp));
+
+    auto mtrhphz = std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "mtrhphz", 1 }, "Meter HP freq",
+        juce::NormalisableRange<float> (20.0f, 400.0f, 1.0f, 0.5f), 150.0f,
+        juce::AudioParameterFloatAttributes().withAutomatable (false));
+    layout.add (std::move (mtrhphz));
 
     return layout;
 }
@@ -175,6 +201,9 @@ void MakeGainProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     uiDeltaValid_.store (machine->delta_valid());
     uiAppliedDb_.store (machine->applied_gain_db());
     uiDeltaDb_.store (machine->delta_db());
+    uiWetDb_.store (machine->wet_loudness_db());
+    uiDryDb_.store (machine->dry_loudness_db());
+    uiFrozen_.store (machine->frozen());
 }
 
 bool MakeGainProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -268,11 +297,28 @@ void MakeGainProcessor::crossParameters()
                              : makegain::dsp::GainMetric::lufs);
     machine->set_max_comp_db ((double) maxcompParam->load());
     machine->set_ramp_tc ((double) ramptcParam->load());
+    // A3 stage-3: response (FR-23), freeze (FR-24), metering HP (FR-26).
+    // The engine's setters are change-guarded, so the per-block fan-out
+    // is two writes at steady state. All three are UI-only parameters;
+    // AudioParameterChoice's raw value is the SELECTION INDEX as a float.
+    machine->set_meter_window (responseParam->load() > 0.5f ? 0.4
+                         : makegain::dsp::GainComputer::kMeterWindowSec);
+    machine->set_frozen (freezeParam->load() > 0.5f);
+    machine->set_meter_hp (mtrhpParam->load() > 0.5f,
+                           (double) mtrhphzParam->load());
 }
 
 const juce::String MakeGainProcessor::statusLine() const
 {
-    if (machine == nullptr || activeParam->load() <= 0.5f)
+    if (machine == nullptr)
+        return "standby - compensation engages when Active is on";
+
+    // FR-24: a frozen plugin IS a static trimmer - the status must say
+    // so first (the lock dominates the A2 flag hierarchy).
+    if (uiFrozen_.load())
+        return "GAIN FROZEN - static held level (release to resume)";
+
+    if (activeParam->load() <= 0.5f)
         return "standby - compensation engages when Active is on";
 
     const auto wetFlag  = uiNoSignalWet.load();

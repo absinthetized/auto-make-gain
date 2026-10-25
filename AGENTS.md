@@ -21,12 +21,22 @@ Binding for any AI/agent working in this repository:
      of the implementation plan, and the owner agrees on it *before* coding;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
-   - **Commit cadence (owner, 2026-10-18):** commits are prepared
-     **one at a time** and never executed on default: for every commit, the
-     agent first shows the owner the exact content (diff) and commits only
-     on a per-commit explicit "ok". Batch approvals ("proceed with the
-     branch") cover the *plan*, not the commits — each commit still gets
-     its own eyeball.
+   - **Commit cadence (owner, 2026-10-18; amended twice — read BOTH):**
+     For every commit, the agent shows the owner the exact content (diff)
+     and commits only on a per-commit explicit "ok" — batch approvals
+     cover the *plan*, never the commits.
+     **Exception (owner, 2026-10-25, SUPERCEDING the same-day "AI-only
+     commits skip eyeball" ruling):** *docs-only* commits (pure markdown/
+     txt: FR/DTS amendments, plan/ledger records, rule edits) may land
+     directly — they are never code and the owner reads the PR. The
+     exemption is EXACTLY that: any commit touching a source file
+     (anything in a programming language, including build scripts) keeps
+     the full per-commit eyeball gate, red/green notwithstanding.
+     Owner judgment gates (FR rulings/ceremony/scope) stay above that,
+     docs or not. Extra hygiene (owner, 2026-10-25): the assistant
+     maintains this distinction as a hard procedure gate *before every
+     commit*: ask "does this diff touch a source file?"; if yes → show
+     diff → wait for explicit ok → only then commit.
    - **Reference metrics** (owner, 2026-10-18) — warnings, not strict rules;
      exceeding either needs explicit justification in the PR description:
      - one PR (and its branch) stays **within 10 commits**;

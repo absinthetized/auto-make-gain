@@ -14,21 +14,34 @@
 
 #include "loudness_meter.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace makegain::dsp {
 
 LoudnessMeter::LoudnessMeter(double sample_rate, double window_seconds)
     : kweight_(sample_rate) {
-  window_samples_ = static_cast<uint64_t>(
-      std::llround(window_seconds * sample_rate));
+  sample_rate_ = sample_rate;
   sub_samples_ = static_cast<uint64_t>(
       std::llround(sample_rate * 0.1)); // 100 ms, the BS.1770 sub-block
+  window_samples_ = static_cast<uint64_t>(
+      std::llround(window_seconds * sample_rate));
+  // Capacity reserved for the LARGEST span (3.0 s) + 1 open slot, so
+  // set_window never allocates at runtime (A3 FR-23).
+  const double cap_window = std::max(window_seconds, kMaxWindowSec);
+  const uint64_t cap_samples = static_cast<uint64_t>(
+      std::llround(cap_window * sample_rate));
   const auto nodes =
-      static_cast<std::size_t>((window_samples_ + sub_samples_ - 1) /
+      static_cast<std::size_t>((cap_samples + sub_samples_ - 1) /
                                sub_samples_) + 1; // +1: the open node
   ring_.resize(nodes);
   scratch_.resize(static_cast<std::size_t>(sub_samples_));
+}
+
+void LoudnessMeter::set_window(double seconds) {
+  const double clamped = std::min(std::max(seconds, 0.1), kMaxWindowSec);
+  window_samples_ = static_cast<uint64_t>(
+      std::llround(clamped * sample_rate_));
 }
 
 void LoudnessMeter::process(const float* samples, std::size_t count) {

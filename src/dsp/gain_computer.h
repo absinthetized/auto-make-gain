@@ -38,6 +38,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "loudness_meter.h"
 
@@ -73,6 +74,24 @@ class GainComputer {
   // to 0 dB from wherever the applied gain currently is.
   void set_engaged(bool engaged);
 
+  // -- A3 (PR-C) engine surfaces (FR-23/24/26), spec'ed by tests
+  // R-F1..R-F8:
+  //   set_meter_window: meter-span re-aim (guard-compared, no allocation)
+  //   set_frozen:       locks the applied gain; meters stay fed so the
+  //                     release re-targets seamlessly from the held value
+  //   set_meter_hp:     metering-path high-pass (both taps), coefficients
+  //                     allocation-free; cache-compared per call
+  //   wet/dry loudness: per-tap readouts captured at each slot evaluation
+  void set_meter_window(double seconds);  // FR-23 (S = 3.0 default, M = 0.4)
+  void set_frozen(bool frozen);           // FR-24
+  bool frozen() const;
+  void set_meter_hp(bool enabled, double hz);  // FR-26 (fixed 24 dB/oct)
+  // Per-tap loudness readouts (FR §10.6 lists wet + dry loudness; PR-C
+  // exposes them through the processor for the UI). Values are the LAST
+  // slot evaluation of the current metric, only meaningful while valid.
+  double wet_loudness_db() const;
+  double dry_loudness_db() const;
+
   // -- audio thread -----------------------------------------------------
   // Feed BOTH mono sums (wet, dry) and advance over `count` samples; any
   // block size (ragged, huge, zero) is safe; the per-sample ramp math is
@@ -101,7 +120,10 @@ class GainComputer {
   // slot / streak lengths are code constants; MaxComp + ramp speed are
   // the UI-exposed parameters arriving with stage 2).
   static constexpr double kMeterWindowSec = 3.0;    // short-term window
-  static constexpr double kDefaultRampTcSec = 0.3;  // 300 ms ramp (FR-5)
+  // A3 FR-25: the 300 ms default was field-ruled too slow for this
+  // product's primary workflow (chain-edit A/B) - 50 ms it is (owner,
+  // 2026-10-23/25). The floor is the PR-B3 range limit (10 ms).
+  static constexpr double kDefaultRampTcSec = 0.05;  // 50 ms ramp (FR-5)
   // A2 §10.4: MaxComp default lowered 24 → 16 dB (range 0–48 unchanged).
   static constexpr double kDefaultMaxCompDb = 16.0;
   // Wall-slot silence threshold (newest 100 ms mean square ≤ this ⇒
@@ -118,6 +140,52 @@ class GainComputer {
 
   GainMetric metric_ = GainMetric::lufs;
   bool engaged_ = false;
+
+  // A3 (PR-C): meter response span (FR-23), freeze lock (FR-24) and the
+  // metering-path high-pass (FR-26). The filter is a 4th-order
+  // Butterworth HP = two cascaded double-precision biquads per tap
+  // (direct-form II transposed); both taps share the coefficients but
+  // carry independent state, so equal inputs stay bitwise equal (R-F7).
+  bool frozen_ = false;
+  double meter_window_ = kMeterWindowSec;
+  bool meter_hp_enabled_ = false;
+  double meter_hp_hz_ = 150.0;
+
+  // Allocation-free metering HP (coefficients are RBJ-derived at fc;
+  // states reset on enable/frequency changes — change-guarded per call).
+  struct HpBiquad {
+    double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+    // Direct-form II transposed, allocation-free per sample.
+    double step(double x) {
+      const double y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      x2 = x1; x1 = x;
+      y2 = y1; y1 = y;
+      return y;
+    }
+    void clear() { x1 = x2 = y1 = y2 = 0.0; }
+  };
+  struct HpStage { HpBiquad q1, q2; void clear() { q1.clear(); q2.clear(); } };
+  HpStage hp_wet_stage_, hp_dry_stage_;
+  double hp_stage_Q1_ = 0.5411961001461970;  // Butterworth 4th: 1/(2·cos15°)
+  double hp_stage_Q2_ = 1.3065629648763766;  // Butterworth 4th: 1/(2·sin15°)
+
+  // Meter feeds, HP-filtered when enabled: scratch buffers sized once at
+  // construction (max = one eval-slot chunk), reused per block.
+  std::vector<float> hp_scratch_wet_, hp_scratch_dry_;
+
+  // Per-tap loudness readouts (FR §10.6), captured on each slot
+  // evaluation in the CURRENT metric; sentinel 0.0 until first valid.
+  double last_wet_db_ = 0.0;
+  double last_dry_db_ = 0.0;
+
+  // (Re)computes the HP stage coefficients for `hz`; called only when
+  // the caller's cache guard sees a real change. Allocation-free.
+  void recompute_hp_coefficients(double hz);
+  // Filters `count` samples through one tap's 4th-order HP into `out`
+  // (mutates the stage's state, obviously; no allocation).
+  void hp_process(HpStage& stage, const float* in, float* out,
+                  std::size_t count);
 
   double sample_rate_ = 0.0;
   double max_comp_db_ = kDefaultMaxCompDb;

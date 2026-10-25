@@ -297,3 +297,45 @@ this inherently). A mono-only feed into one aux channel reads 6 dB too
 quiet in the aux mono-sum and overcompensates by that skew. The plugin
 deliberately does NOT auto-detect this (hard-panned content in the aux
 is legitimate audio); it is a documented misroute, not a code branch.
+
+### 10.9 Amendment A3 — responsiveness, freeze, metering HP (2026-10-25, owner rulings)
+
+The A2 AGC is tuned for usability with three new controls. All are UI-
+only non-automatable parameters; all persist with the session (FR-22).
+
+**FR-23 Meter response.** One parameter, two standardized responses:
+
+- **Short (S)** — 3 s measurement window (the A2 default; the ITU
+  BS.1770 short-term geometry).
+- **Fast (M-convention)** — 400 ms measurement window, refreshed every
+  100 ms; the ITU momentary geometry on the A2 slot grid.
+
+Both share the identical slot machinery, metric, ramp and hold rules;
+only the measurement window (and thereby target liveliness/convergence
+time) changes. Fast converges ~4–7× quicker after a chain edit and is
+stabbed more easily by program low-end movement; stability is the
+user's via response + meter HP (below) + Freeze.
+
+**FR-24 Gain freeze.** A toggle that converts the compensator into a
+**static volume adjustment**: engaging Freeze locks the applied gain
+at its current value (metering idles — no evaluation, no ramping, no
+further gain movement). Releasing restores evaluation with the ramp
+starting from the held value toward the live target — continuous, no
+jump. Frozen state persists across save/reload.
+
+**FR-25 Ramp default lowered.** Default ramp tc 300 ms → **50 ms**
+(decisions register, 2026-10-23/25): the fast feel owners actually use.
+Range unchanged (floor 10 ms — PR-B3).
+
+**FR-26 Metering high-pass (optional, default OFF).** A high-pass
+**in the metering path only** — applied identically to wet and dry
+meter feeds, the audio path is untouched (no coloration ever reaches
+the signal). Parameters: enable toggle + corner frequency 20–400 Hz
+(default 150), slope fixed at 24 dB/oct (4th-order Butterworth).
+Purpose: dynamic EQs / multiband chains pump the low end; the energy
+dominance of bass then drives the AGC's delta. HP makes that band
+invisible to compensation, exactly as low-cut crosstalk isolation in
+crossover/analysis practice. Honest semantics: with HP engaged, the
+compensation targets the *filtered* loudness interval (documented
+readout implication); symmetric wet/dry filtering keeps musical level
+motion out of the delta (10.2 invariant unchanged).

@@ -94,6 +94,9 @@ public:
 
     double uiAppliedDb() const { return uiAppliedDb_.load (std::memory_order_relaxed); }
     double uiDeltaDb()  const { return uiDeltaDb_.load (std::memory_order_relaxed); }
+    double uiWetDb()    const { return uiWetDb_.load (std::memory_order_relaxed); }
+    double uiDryDb()    const { return uiDryDb_.load (std::memory_order_relaxed); }
+    bool   uiFrozen()   const { return uiFrozen_.load (std::memory_order_relaxed); }
     bool   uiDeltaValid() const { return uiDeltaValid_.load (std::memory_order_relaxed); }
 
     // Editor-only access to the parameter tree (attachments bind here).
@@ -121,6 +124,10 @@ private:
     std::atomic<float>* metricParam  = nullptr;   // 0 = LUFS, 1 = dB RMS
     std::atomic<float>* maxcompParam = nullptr;   // 0..48 dB
     std::atomic<float>* ramptcParam  = nullptr;   // seconds
+    std::atomic<float>* responseParam = nullptr;  // 0 = Short, 1 = Fast
+    std::atomic<float>* freezeParam   = nullptr;  // FR-24 lock
+    std::atomic<float>* mtrhpParam    = nullptr;  // metering HP enable
+    std::atomic<float>* mtrhphzParam  = nullptr;  // metering HP corner Hz
 
     // The A2 delta engine. Unique pointer (not member) because the sample
     // rate is only known at prepareToPlay: the engine owns two meters that
@@ -140,6 +147,9 @@ private:
     std::atomic<bool>  uiDeltaValid_ { false };
     std::atomic<double> uiAppliedDb_ { 0.0 };   // applied gain readout (FR §10.6)
     std::atomic<double> uiDeltaDb_ { 0.0 };     // chain delta readout
+    std::atomic<double> uiWetDb_ { 0.0 };       // per-tap readouts (A3 §10.6)
+    std::atomic<double> uiDryDb_ { 0.0 };
+    std::atomic<bool>  uiFrozen_ { false };     // FR-24 state → status line
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainProcessor)
 };

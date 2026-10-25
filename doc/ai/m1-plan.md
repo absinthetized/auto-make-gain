@@ -328,3 +328,51 @@ auto-act).
   PB2a/B5 machinery — emitter now observes the AGC's applied gain).
 - **R-D9** state: no reference object, no codec, no training counters —
   persistence is parameters only (FR-22 narrowed).
+
+## PR-B3 wrap (2026-10-25, owner merge `99f4f64`)
+
+Branch `pb3-params-ui` pushed/merged by the owner as PR #8 ("Pb3 params
+UI"). Contents: the TAP lane-copy fix (abe03fa, −3 dB root cause:
+JSFX registries are 0-based — spl2/spl3 were aux, not wet, see the
+commit body for the full resolution), stage-2 params (f55961b), the
+A2 readout panel UI (deb93e5), the delta-unit display fix (d368624),
+ramp floor 10 ms (8a4d987). Lane evidence: arm64 + amd64 Rosetta,
+both ALL GREEN incl. sanitizer presets at the tip. Pen bundle
+re-assembled per build.md §7.1: `makegain-linux-arts-8a4d987`.
+Owner smoke B + pen-side Linux testing passed (Linux session marred
+by a system-level suspension/audio breakage — environmental,
+reported by the owner, not plugin behavior).
+
+Owner observations carried forward from the PR-B3 party:
+- **Ardour routing is not discoverable enough** — owner used the
+  two-bus approach; a routing walkthrough (incl. sidechain-from-
+  track-input + the mono case is owed to the docs-refresh PR).
+- **LUFS/dB metrics read the same shape** (bass cuts > 1–2k cuts) —
+  energy-dominance physics, not a bug (decisions row 2026-10-23).
+
+## PR-C plan (2026-10-25, A3 after the merge): tuning + freeze + meter HP
+
+FR A3 (3a96621, owner rulings before code) + runtime gates:
+commit plan approved in-chat, <10 commits ≤7 files:
+- docs1 `docs: FR amendment A3` (landed first for owner review)
+- docs2 `docs(rules): commit cadence amended - AI-only commits skip
+  per-commit eyeball` (owner ruling; landed with the decisions row)
+- red3 `test(red): R-F1..R-F8` (failing honest stubs; native-lane
+  evidence while docker was down: 29 cases → 4 failed as designed)
+- dsp4 `dsp(green): freeze, meter window, metering HP` (29/29)
+- plug5 `plugin: stage-3 params + ramp default 50 ms (FR-25)`
+- ui6 `ui: A3 controls`
+- docs7 (this commit)
+
+**PR-C pending gates:** owner smoke C (mac first), linux lanes (will
+rebuild fresh when docker daemon returns), pen bundle refresh at tip.
+
+## Post-PR-C backlog (owner-flagged, in priority order)
+
+1. UI polish (two-column/resizable layout, true switch look; DPI is
+   free via the OS renderer).
+2. Human docs refresh (build.md CLAP manual-copy note; Ardour
+   routing walkthrough; README quickstart).
+3. Ramp round 2: default already landed (50 ms); deeper convergence
+   work (the Short window stays 3 s — Fast covers it via FR-23)
+   waits for release strategy.
