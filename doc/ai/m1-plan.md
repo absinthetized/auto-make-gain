@@ -372,7 +372,13 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
 1. UI polish (two-column/resizable layout, true switch look; DPI is
    free via the OS renderer).
 2. Human docs refresh (build.md CLAP manual-copy note; Ardour
-   routing walkthrough; README quickstart).
+   routing walkthrough; README quickstart). Include: the Ardour-only
+   VST3 quirk — "ardour and only ardour needs the .so file to be
+   executable" (owner, 2026-10-25): a transfer-fs caveat for §8.1
+   (pen filesystems drop Unix exec bits; restore with
+   `find <bundle> -name '*.so' -exec chmod +x {} +` on the target)
+   and an entry in the §6.10 Ardour checklist. Lane-side chmod was
+   evaluated and dropped by owner decision (WIP activity).
 3. Ramp round 2: default already landed (50 ms); deeper convergence
    work (the Short window stays 3 s — Fast covers it via FR-23)
    waits for release strategy.
