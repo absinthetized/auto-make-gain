@@ -120,7 +120,10 @@ class GainComputer {
   // slot / streak lengths are code constants; MaxComp + ramp speed are
   // the UI-exposed parameters arriving with stage 2).
   static constexpr double kMeterWindowSec = 3.0;    // short-term window
-  static constexpr double kDefaultRampTcSec = 0.3;  // 300 ms ramp (FR-5)
+  // A3 FR-25: the 300 ms default was field-ruled too slow for this
+  // product's primary workflow (chain-edit A/B) - 50 ms it is (owner,
+  // 2026-10-23/25). The floor is the PR-B3 range limit (10 ms).
+  static constexpr double kDefaultRampTcSec = 0.05;  // 50 ms ramp (FR-5)
   // A2 §10.4: MaxComp default lowered 24 → 16 dB (range 0–48 unchanged).
   static constexpr double kDefaultMaxCompDb = 16.0;
   // Wall-slot silence threshold (newest 100 ms mean square ≤ this ⇒

@@ -283,6 +283,10 @@ TEST_CASE("gain computer: ramp properties on engage/disengage (R-D6)") {
   const auto wet = sine_1k(-6.0, seconds(9.5));   // −9.0 ⇒ target +6
 
   dsp::GainComputer g(kRate);  // NOT engaged: target stays 0, applied 0
+  // A3 note: the default tc changed to 50 ms (FR-25). This case pins
+  // the ONE-POLE SHAPE, not the default: pin tc = 0.3 explicitly so the
+  // closed-form bounds keep asserting exactly that shape.
+  g.set_ramp_tc(0.3);
   std::vector<float> pre;
   feed(g, wet, dry, pre, {7u, 1u, 479u, 13u});  // settle pre-engage
   CHECK(g.applied_gain_db() == Approx(0.0).margin(0.01));
