@@ -21,12 +21,20 @@ Binding for any AI/agent working in this repository:
      of the implementation plan, and the owner agrees on it *before* coding;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
-   - **Commit cadence (owner, 2026-10-18):** commits are prepared
-     **one at a time** and never executed on default: for every commit, the
-     agent first shows the owner the exact content (diff) and commits only
-     on a per-commit explicit "ok". Batch approvals ("proceed with the
-     branch") cover the *plan*, not the commits — each commit still gets
-     its own eyeball.
+   - **Commit cadence (owner, 2026-10-18; AMENDED 2026-10-25):** the
+     per-commit eyeball gate is RETIRED. **AI-only commits** — changes
+     authored entirely by the assistant inside a work-unit plan the owner
+     approved (commit-breakdown + scope; for test-covered units, the
+     red/green assertion spec) — are committed by the agent as the work
+     proceeds, without a per-commit approval gate. The owner's review
+     happens at **PR level** (he reads and merges the PR diff), backed by
+     red/green: green commits implement only owner-approved assertions.
+     Still in force: atomic when possible, human-sized, never mixing
+     unrelated changes; and **anything the owner must judge as an owner
+     (FR contract changes/rulings, tag/ceremony material, anything past
+     the approved plan's scope) still pauses for him first — the
+     retirement is permission to *commit* without him, not permission
+     to *decide* solo.**
    - **Reference metrics** (owner, 2026-10-18) — warnings, not strict rules;
      exceeding either needs explicit justification in the PR description:
      - one PR (and its branch) stays **within 10 commits**;
