@@ -396,6 +396,11 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
    grammar (tick centered, label below; BooleanCheckboxLnf), strip
    order Active-Freeze-Metric-Response-MeterHP, ring darkened to
    #a8762a (owner: full amber too strong).
+   Owner iteration 4: `5de4c72` Short/Fast captions to title case;
+   variant-A readout band `5c58b6a` - modality pills flank the applied
+   number in the side columns (grid: MaxComp+Active / MtrHP+its
+   checkbox), number clamped center, checkboxes stay in the strip on
+   the rotary columns. Owner-approved alignment ("feels good").
    Residue dropped by owner decision during re-scope: two-column +
    resizable layout (the panel feels better as-is). Known limitation
    kept knowingly: panel is fixed-size 468x400 and the painter's
