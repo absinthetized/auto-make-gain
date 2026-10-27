@@ -392,6 +392,10 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
    - `b066849` Freeze locks the Meter HP button both directions
      (flipping the metering definition mid-hold shifts readouts ->
      false alarm) and gates the freq rotary on (hpOn && !frozen).
+   Owner iteration 3: `6c4830e` - checkbox captions join the row
+   grammar (tick centered, label below; BooleanCheckboxLnf), strip
+   order Active-Freeze-Metric-Response-MeterHP, ring darkened to
+   #a8762a (owner: full amber too strong).
    Residue dropped by owner decision during re-scope: two-column +
    resizable layout (the panel feels better as-is). Known limitation
    kept knowingly: panel is fixed-size 468x400 and the painter's
