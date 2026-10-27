@@ -385,6 +385,13 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
      HP off; MaxComp+Ramp tc <- Freeze)
    Rules note: answer-style rule added same day (AGENTS.md rule 10,
    `a05a521`).
+   Owner iteration 2 (still on `pr-d-ui-polish`):
+   - `7ce88c3` two skins by control nature: on/off booleans back to
+     native checkbox rendering; pill reserved for the two modality
+     switches, whose caption never dims (a modality has no off).
+   - `b066849` Freeze locks the Meter HP button both directions
+     (flipping the metering definition mid-hold shifts readouts ->
+     false alarm) and gates the freq rotary on (hpOn && !frozen).
    Residue dropped by owner decision during re-scope: two-column +
    resizable layout (the panel feels better as-is). Known limitation
    kept knowingly: panel is fixed-size 468x400 and the painter's
