@@ -15,6 +15,14 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
 
     // Attached toggles (bool parameters: ButtonAttachment does both
     // directions — user click to parameter, host persistence to button).
+    // Switch redesign (PR-D): every strip control wears the shared
+    // sliding-switch LookAndFeel — booleans and choice switches alike,
+    // so the panel has ONE visual grammar for dual-state controls.
+    activeButton.setLookAndFeel (&stripSwitchLnf);
+    freezeButton.setLookAndFeel (&stripSwitchLnf);
+    mtrhpButton.setLookAndFeel (&stripSwitchLnf);
+    metricSwitch.setLookAndFeel (&stripSwitchLnf);
+    responseSwitch.setLookAndFeel (&stripSwitchLnf);
     addAndMakeVisible (activeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (mtrhpButton);
@@ -172,5 +180,58 @@ void MakeGainEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xffe8e4dc));
     g.setFont (juce::FontOptions (13.0f));
     g.drawText (processorRef.statusLine(), statusStrip.reduced (8, 0),
+                juce::Justification::centred);
+}
+
+// ---------------------------------------------------------------------------
+// StripSwitchLnf (PR-D switch redesign): custom renderer for the five
+// dual-state strip controls. Framework context: a LookAndFeel is JUCE's
+// pluggable skin object — overriding drawToggleButton here re-styles
+// ONLY the components that carry this instance (setLookAndFeel above),
+// other ToggleButtons in the host are untouched. We draw the whole
+// control ourselves: sliding pill + caption.
+// ---------------------------------------------------------------------------
+void MakeGainEditor::StripSwitchLnf::drawToggleButton (
+    juce::Graphics& g, juce::ToggleButton& b,
+    bool highlighted, bool down)
+{
+    const auto bounds = b.getLocalBounds().toFloat();
+
+    // Geometry: pill on top, caption under it. Pill scans the label
+    // width (the "= off, right = on" reading is the switch affordance).
+    const float pillW = juce::jmin (bounds.getWidth() * 0.46f, 48.0f);
+    const float pillH = juce::jmin (bounds.getHeight() * 0.42f, 26.0f);
+    const float pillX = bounds.getCentreX() - pillW / 2.0f;
+    const float pillY = bounds.getY() + bounds.getHeight() * 0.12f;
+    const auto pill = juce::Rectangle<float> { pillX, pillY, pillW, pillH };
+    const float knobD = pillH - 6.0f;
+    const bool on = b.getToggleState();
+
+    // Track: soft green when active, dark slate when not; a touched
+    // (highlight) track lightens so the pointer target stays evident.
+    juce::Colour track = on ? juce::Colour (0xff5e9e6f)   // soft green
+                            : (highlighted ? juce::Colour (0xff39424d)
+                                           : juce::Colour (0xff2c333c));
+    g.setColour (down ? track.darker (0.15f) : track);
+    g.fillRoundedRectangle (pill, pillH / 2.0f);
+
+    // Knob: slides left (off) to right (on), no animation — state flips
+    // are binary parameter changes, not gestures worth a tween.
+    const float knobLeft = pill.getX() + 3.0f;
+    const float knobRight = pill.getRight() - 3.0f - knobD;
+    const float knobX = on ? knobRight : knobLeft;
+    g.setColour (juce::Colour (0xffe8e4dc));   // same warm off-white body
+    g.fillEllipse (knobX, pill.getY() + 3.0f, knobD, knobD);
+
+    // Caption row: control name for booleans, live selection text
+    // ("LUFS" / "dB RMS", "SHORT" / "FAST") for the choice switches,
+    // maintained by the editor timer. Immutable slice — the pill math
+    // above already consumed its share of the bounds.
+    const auto caption = juce::Rectangle<float> {
+        bounds.getX(), bounds.getBottom() - (pillH - 2.0f),
+        bounds.getWidth(), pillH - 2.0f };
+    g.setColour (on ? juce::Colour (0xffe8e4dc) : juce::Colour (0xff8a9099));
+    g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+    g.drawText (b.getButtonText(), caption,
                 juce::Justification::centred);
 }
