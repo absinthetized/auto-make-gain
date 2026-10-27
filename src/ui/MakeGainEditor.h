@@ -46,11 +46,39 @@ private:
 
     // Attached buttons (bool parameters: ButtonAttachment does both
     // directions — user click to parameter, persistence to button).
+    // Native checkbox look (PR-D owner iteration 2): on/off booleans
+    // keep JUCE's standard rendering; the pill look is reserved for
+    // the two modality switches below.
     juce::ToggleButton activeButton { "Active" };   // THE automatable param
     juce::ToggleButton freezeButton { "Freeze" };   // FR-24 static lock
     juce::ToggleButton mtrhpButton { "Meter HP" };  // FR-26 enable
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         activeAttach, freezeAttach, mtrhpAttach;
+
+    // Shared custom LookAndFeel (PR-D switch redesign, re-scoped by
+    // owner): renders ToggleButtons as sliding modality pills with a
+    // caption. One instance for both choice switches — the caption is
+    // the live selection text (the timer already maintains it: "LUFS"
+    // / "dB RMS", "SHORT" / "FAST") and stays bright in BOTH states
+    // (a modality has no off, so no dimming).
+    struct ModalitySwitchLnf : juce::LookAndFeel_V4
+    {
+        void drawToggleButton (juce::Graphics&, juce::ToggleButton&,
+                               bool highlighted, bool down) override;
+    };
+    ModalitySwitchLnf modalitySwitchLnf;
+
+    // Boolean skin (PR-D owner visual feedback): the native checkbox
+    // draws its label BESIDE the tick, which broke the row grammar
+    // (pills read caption-below). This keeps the checkbox look — tick
+    // box, on/off dimming — but centers the box and puts the caption
+    // below, matching the pill geometry exactly.
+    struct BooleanCheckboxLnf : juce::LookAndFeel_V4
+    {
+        void drawToggleButton (juce::Graphics&, juce::ToggleButton&,
+                               bool highlighted, bool down) override;
+    };
+    BooleanCheckboxLnf booleanCheckboxLnf;
 
     // Switch buttons over 2-choice parameters (no attachment type maps
     // choice→button, so the glue is manual both ways — see timerCallback

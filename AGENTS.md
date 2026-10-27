@@ -96,3 +96,13 @@ Binding for any AI/agent working in this repository:
    host, or system services. If a container script fails, the agent reports
    the error verbatim and stops; system-level remediation (Docker daemon,
    driver/host configuration) belongs to the owner/sysadmin.
+10. **Answer style (owner, 2026-10-25):** when the owner asks a question,
+   answer with the simple/short answer first. In-depth breakdowns
+   (itemized by-commit or by-scope detail) are an option — offered in a
+   single line or provided on request — never delivered unbidden as the
+   base reply.
+11. **Visual grammar (owner, 2026-10-25, PR-D lessons):** all MakeGain
+   user-panel work follows `doc/ai/visual-grammar.md` (color vocabulary,
+   control taxonomy, column grid / hero-central pattern, protected
+   hero, honest affordances, text discipline). Deviating from it is a
+   design decision — the owner judges it first.

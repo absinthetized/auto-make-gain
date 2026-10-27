@@ -97,6 +97,11 @@ public:
     double uiWetDb()    const { return uiWetDb_.load (std::memory_order_relaxed); }
     double uiDryDb()    const { return uiDryDb_.load (std::memory_order_relaxed); }
     bool   uiFrozen()   const { return uiFrozen_.load (std::memory_order_relaxed); }
+    // Red-light source (PR-D status colors): the aux/sidechain tap being
+    // dead makes the delta unmeasurable — the UI renders this as an
+    // alert, so it needs the processor's other atomics too.
+    bool   uiSidechainMissing() const
+        { return uiDryTapMissing.load (std::memory_order_relaxed); }
     bool   uiDeltaValid() const { return uiDeltaValid_.load (std::memory_order_relaxed); }
 
     // Editor-only access to the parameter tree (attachments bind here).
