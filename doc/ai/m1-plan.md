@@ -369,8 +369,27 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
 
 ## Post-PR-C backlog (owner-flagged, in priority order)
 
-1. UI polish (two-column/resizable layout, true switch look; DPI is
-   free via the OS renderer).
+1. ~~UI polish~~ → **PR-D (2026-10-25, branch `pr-d-ui-polish`)**:
+   re-scoped with the owner mid-plan (two-column layout dropped; the
+   switch redesign was NOT dropped - owner caught the silent scope
+   loss). Four code commits, each eyeballed per rule 4:
+   - `ee01740` amber accent ring on Active, AUTOMATABLE caption gone
+     (visual language: amber = automatable, no label)
+   - `598d7a7` StripSwitchLnf: all five dual-state strip controls
+     draw as sliding pills + caption (plumbing untouched)
+   - `02134c3` strip renders below the rotary row (rotaries are the
+     most-relevant controls; also fixed the PR-C strip/readout overlap)
+   - `154f645` status bar state light: gray standby / green rolling /
+     red sidechain dead / ice frozen; + uiSidechainMissing() accessor
+   - `a8a8c44` dependent controls grey while inert (HP freq <- Meter
+     HP off; MaxComp+Ramp tc <- Freeze)
+   Rules note: answer-style rule added same day (AGENTS.md rule 10,
+   `a05a521`).
+   Residue dropped by owner decision during re-scope: two-column +
+   resizable layout (the panel feels better as-is). Known limitation
+   kept knowingly: panel is fixed-size 468x400 and the painter's
+   caption rectangles are hand-mirrored to resized() coordinates -
+   any layout edit must update both (commented at both sites).
 2. Human docs refresh (build.md CLAP manual-copy note; Ardour
    routing walkthrough; README quickstart). Include: the Ardour-only
    VST3 quirk — "ardour and only ardour needs the .so file to be
