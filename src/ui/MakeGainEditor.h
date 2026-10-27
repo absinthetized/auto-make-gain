@@ -68,6 +68,18 @@ private:
     };
     ModalitySwitchLnf modalitySwitchLnf;
 
+    // Boolean skin (PR-D owner visual feedback): the native checkbox
+    // draws its label BESIDE the tick, which broke the row grammar
+    // (pills read caption-below). This keeps the checkbox look — tick
+    // box, on/off dimming — but centers the box and puts the caption
+    // below, matching the pill geometry exactly.
+    struct BooleanCheckboxLnf : juce::LookAndFeel_V4
+    {
+        void drawToggleButton (juce::Graphics&, juce::ToggleButton&,
+                               bool highlighted, bool down) override;
+    };
+    BooleanCheckboxLnf booleanCheckboxLnf;
+
     // Switch buttons over 2-choice parameters (no attachment type maps
     // choice→button, so the glue is manual both ways — see timerCallback
     // and the on-click capture in the constructor).

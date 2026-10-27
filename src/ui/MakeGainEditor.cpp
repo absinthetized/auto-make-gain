@@ -15,9 +15,13 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
 
     // Attached toggles (bool parameters: ButtonAttachment does both
     // directions — user click to parameter, host persistence to button).
-    // Switch redesign, owner-iteration 2 (PR-D): the two modality
-    // switches wear the shared sliding-pill LookAndFeel; the three
-    // on/off booleans above use the native checkbox rendering.
+    // Switch redesign, owner-iteration 3 (PR-D): the two modality
+    // switches wear the pill skin; the booleans keep the CHECKBOX look
+    // but get the BooleanCheckboxLnf so their caption sits below the
+    // tick (native rendering puts it beside, breaking the row grammar).
+    activeButton.setLookAndFeel (&booleanCheckboxLnf);
+    freezeButton.setLookAndFeel (&booleanCheckboxLnf);
+    mtrhpButton.setLookAndFeel (&booleanCheckboxLnf);
     metricSwitch.setLookAndFeel (&modalitySwitchLnf);
     responseSwitch.setLookAndFeel (&modalitySwitchLnf);
     addAndMakeVisible (activeButton);
@@ -133,7 +137,9 @@ void MakeGainEditor::resized()
     ramptcSlider.setBounds (162, 178, 144, 92);
     mtrhphzSlider.setBounds (310, 178, 144, 92);
 
-    // Dual-state strip (sliding switches), under the rotaries.
+    // Dual-state strip (sliding switches), under the rotaries. Order
+    // (PR-D owner ruling): the two gain-behavior controls couple left
+    // — Active, Freeze — then the mode switches, then Meter HP.
     const int bw = (468 - 28) / 5;
     int x = 14;
     auto placeButton = [&x, bw] (juce::Component& c)
@@ -142,9 +148,9 @@ void MakeGainEditor::resized()
         x += bw;
     };
     placeButton (activeButton);
+    placeButton (freezeButton);
     placeButton (metricSwitch);
     placeButton (responseSwitch);
-    placeButton (freezeButton);
     placeButton (mtrhpButton);
 }
 
@@ -193,7 +199,8 @@ void MakeGainEditor::paint (juce::Graphics& g)
     // The ONE automatable parameter carries a thin amber border instead
     // — a per-component painted frame (drawn AFTER the component, so it
     // reads as "this control has a role", not as the button's own face).
-    g.setColour (juce::Colour (0xffd9a441));   // warm amber accent
+    g.setColour (juce::Colour (0xffa8762a));   // dark amber (owner: full
+                                               // amber was too strong)
     g.drawRoundedRectangle (activeButton.getBounds().toFloat().reduced (2.0f),
                             6.0f, 2.0f);
 
@@ -226,6 +233,58 @@ void MakeGainEditor::paint (juce::Graphics& g)
     g.setColour (ink);
     g.setFont (juce::FontOptions (13.0f));
     g.drawText (processorRef.statusLine(), statusStrip.reduced (8, 0),
+                juce::Justification::centred);
+}
+
+// ---------------------------------------------------------------------------
+// BooleanCheckboxLnf (PR-D owner visual feedback, iteration 3): the
+// native checkbox look — an on/off tick box with on/off caption
+// dimming (the dimming rule is FOR on/off controls) — but with the
+// native label position fixed: center the tick box and put the
+// caption below it, matching the pill row's geometry so the strip
+// reads as one visual system.
+// ---------------------------------------------------------------------------
+void MakeGainEditor::BooleanCheckboxLnf::drawToggleButton (
+    juce::Graphics& g, juce::ToggleButton& b,
+    bool highlighted, bool down)
+{
+    const auto bounds = b.getLocalBounds().toFloat();
+    const bool on = b.getToggleState();
+
+    // Tick box: centered square, same vertical rhythm as the pill row.
+    const float box = juce::jmin (bounds.getHeight() * 0.42f, 24.0f);
+    const auto tick = juce::Rectangle<float> {
+        bounds.getCentreX() - box / 2.0f,
+        bounds.getY() + bounds.getHeight() * 0.12f,
+        box, box };
+    const juce::Colour fill = on
+        ? juce::Colour (0xff5e9e6f)   // same soft green as the pills
+        : (highlighted ? juce::Colour (0xff39424d)
+                       : juce::Colour (0xff2c333c));
+    g.setColour (down ? fill.darker (0.15f) : fill);
+    g.fillRoundedRectangle (tick, 4.0f);
+    g.setColour (on ? fill : juce::Colour (0xff4a545e));
+    g.drawRoundedRectangle (tick, 4.0f, 1.0f);
+
+    // The check mark: two dark strokes on the green fill.
+    if (on) {
+        g.setColour (juce::Colour (0xff14181c));
+        g.drawLine (juce::Line<float> {
+            tick.getX() + box * 0.22f, tick.getCentreY() + box * 0.08f,
+            tick.getX() + box * 0.42f, tick.getBottom() - box * 0.22f }, 2.5f);
+        g.drawLine (juce::Line<float> {
+            tick.getX() + box * 0.42f, tick.getBottom() - box * 0.22f,
+            tick.getX() + box * 0.78f, tick.getY() + box * 0.25f }, 2.5f);
+    }
+
+    // Caption below the tick, dim when off (booleans keep the owner's
+    // on/off dim rule), bright when on.
+    const float capH = box - 2.0f;
+    const auto caption = juce::Rectangle<float> {
+        bounds.getX(), bounds.getBottom() - capH, bounds.getWidth(), capH };
+    g.setColour (on ? juce::Colour (0xffe8e4dc) : juce::Colour (0xff8a9099));
+    g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
+    g.drawText (b.getButtonText(), caption,
                 juce::Justification::centred);
 }
 
