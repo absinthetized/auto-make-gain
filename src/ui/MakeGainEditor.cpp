@@ -97,6 +97,24 @@ void MakeGainEditor::timerCallback()
         responseSwitch.setToggleState (fast, juce::dontSendNotification);
     responseSwitch.setButtonText (fast ? "FAST" : "SHORT");
 
+    // Dependent-control greying (PR-D owner ruling): a control whose
+    // feature is inert right now greys AND stops clicking. Component::
+    // setEnabled/setAlpha no-op cheaply on unchanged values, so the
+    // 10 Hz poll costs nothing at steady state.
+    //   Meter HP off  -> the MTR HP FREQ rotary does nothing (filtered
+    //                    feed is disabled) -> grey.
+    //   Freeze on     -> the gain is a static trimmer; MaxComp and Ramp
+    //                    tc actuate nothing until release -> grey.
+    const bool hpOn = processorRef.getApvts()
+                          .getRawParameterValue ("mtrhp")->load() > 0.5f;
+    const bool frozen = processorRef.uiFrozen();
+    mtrhphzSlider.setEnabled (hpOn);
+    mtrhphzSlider.setAlpha (hpOn ? 1.0f : 0.35f);
+    maxcompSlider.setEnabled (!frozen);
+    ramptcSlider.setEnabled (!frozen);
+    maxcompSlider.setAlpha (frozen ? 0.35f : 1.0f);
+    ramptcSlider.setAlpha (frozen ? 0.35f : 1.0f);
+
     repaint();
 }
 
