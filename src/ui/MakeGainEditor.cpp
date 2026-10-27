@@ -96,7 +96,7 @@ void MakeGainEditor::timerCallback()
     metricSwitch.setButtonText (rms ? "dB RMS" : "LUFS");
     if (fast != responseSwitch.getToggleState())
         responseSwitch.setToggleState (fast, juce::dontSendNotification);
-    responseSwitch.setButtonText (fast ? "FAST" : "SHORT");
+    responseSwitch.setButtonText (fast ? "Fast" : "Short");
 
     // Dependent-control greying (PR-D owner rulings):
     //   Meter HP off  -> the MTR HP FREQ rotary does nothing (filtered
