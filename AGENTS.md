@@ -101,3 +101,8 @@ Binding for any AI/agent working in this repository:
    (itemized by-commit or by-scope detail) are an option — offered in a
    single line or provided on request — never delivered unbidden as the
    base reply.
+11. **Visual grammar (owner, 2026-10-25, PR-D lessons):** all MakeGain
+   user-panel work follows `doc/ai/visual-grammar.md` (color vocabulary,
+   control taxonomy, column grid / hero-central pattern, protected
+   hero, honest affordances, text discipline). Deviating from it is a
+   design decision — the owner judges it first.
