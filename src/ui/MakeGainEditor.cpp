@@ -15,14 +15,11 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
 
     // Attached toggles (bool parameters: ButtonAttachment does both
     // directions — user click to parameter, host persistence to button).
-    // Switch redesign (PR-D): every strip control wears the shared
-    // sliding-switch LookAndFeel — booleans and choice switches alike,
-    // so the panel has ONE visual grammar for dual-state controls.
-    activeButton.setLookAndFeel (&stripSwitchLnf);
-    freezeButton.setLookAndFeel (&stripSwitchLnf);
-    mtrhpButton.setLookAndFeel (&stripSwitchLnf);
-    metricSwitch.setLookAndFeel (&stripSwitchLnf);
-    responseSwitch.setLookAndFeel (&stripSwitchLnf);
+    // Switch redesign, owner-iteration 2 (PR-D): the two modality
+    // switches wear the shared sliding-pill LookAndFeel; the three
+    // on/off booleans above use the native checkbox rendering.
+    metricSwitch.setLookAndFeel (&modalitySwitchLnf);
+    responseSwitch.setLookAndFeel (&modalitySwitchLnf);
     addAndMakeVisible (activeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (mtrhpButton);
@@ -227,14 +224,15 @@ void MakeGainEditor::paint (juce::Graphics& g)
 }
 
 // ---------------------------------------------------------------------------
-// StripSwitchLnf (PR-D switch redesign): custom renderer for the five
-// dual-state strip controls. Framework context: a LookAndFeel is JUCE's
-// pluggable skin object — overriding drawToggleButton here re-styles
-// ONLY the components that carry this instance (setLookAndFeel above),
-// other ToggleButtons in the host are untouched. We draw the whole
-// control ourselves: sliding pill + caption.
+// ModalitySwitchLnf (PR-D switch redesign, owner-iteration 2): custom
+// renderer for the two CHOICE switches only. Framework context: a
+// LookAndFeel is JUCE's pluggable skin object — overriding
+// drawToggleButton here re-styles ONLY the components that carry this
+// instance (setLookAndFeel above); the on/off booleans keep the
+// native checkbox rendering. We draw the whole control: modality pill
+// + caption.
 // ---------------------------------------------------------------------------
-void MakeGainEditor::StripSwitchLnf::drawToggleButton (
+void MakeGainEditor::ModalitySwitchLnf::drawToggleButton (
     juce::Graphics& g, juce::ToggleButton& b,
     bool highlighted, bool down)
 {
@@ -266,14 +264,14 @@ void MakeGainEditor::StripSwitchLnf::drawToggleButton (
     g.setColour (juce::Colour (0xffe8e4dc));   // same warm off-white body
     g.fillEllipse (knobX, pill.getY() + 3.0f, knobD, knobD);
 
-    // Caption row: control name for booleans, live selection text
-    // ("LUFS" / "dB RMS", "SHORT" / "FAST") for the choice switches,
-    // maintained by the editor timer. Immutable slice — the pill math
-    // above already consumed its share of the bounds.
+    // Caption row: the live selection text ("LUFS" / "dB RMS",
+    // "SHORT" / "FAST"), maintained by the editor timer. ALWAYS the
+    // bright ink (PR-D owner iteration 2): a modality has no off
+    // state, so the label must not dim when the other side is chosen.
     const auto caption = juce::Rectangle<float> {
         bounds.getX(), bounds.getBottom() - (pillH - 2.0f),
         bounds.getWidth(), pillH - 2.0f };
-    g.setColour (on ? juce::Colour (0xffe8e4dc) : juce::Colour (0xff8a9099));
+    g.setColour (juce::Colour (0xffe8e4dc));
     g.setFont (juce::FontOptions (12.0f, juce::Font::bold));
     g.drawText (b.getButtonText(), caption,
                 juce::Justification::centred);
