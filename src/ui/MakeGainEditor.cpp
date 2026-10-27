@@ -102,12 +102,22 @@ void MakeGainEditor::timerCallback()
 
 void MakeGainEditor::resized()
 {
-    // Button row: the five engagement/mode toggles share one strip.
+    // Layout order (PR-D owner ruling): the three rotaries are the
+    // most-relevant controls, so the dual-state strip renders BELOW
+    // them — readouts, rotaries, strip, status bar.
+    //
+    // Rotary row: MaxComp / Ramp tc / Meter-HP frequency. Widths match
+    // the painted captions in paint() (three equal columns).
+    maxcompSlider.setBounds (14, 178, 144, 92);
+    ramptcSlider.setBounds (162, 178, 144, 92);
+    mtrhphzSlider.setBounds (310, 178, 144, 92);
+
+    // Dual-state strip (sliding switches), under the rotaries.
     const int bw = (468 - 28) / 5;
     int x = 14;
     auto placeButton = [&x, bw] (juce::Component& c)
     {
-        c.setBounds (x, 134, bw, 54);
+        c.setBounds (x, 300, bw, 54);
         x += bw;
     };
     placeButton (activeButton);
@@ -115,12 +125,6 @@ void MakeGainEditor::resized()
     placeButton (responseSwitch);
     placeButton (freezeButton);
     placeButton (mtrhpButton);
-
-    // Rotary row: MaxComp / Ramp tc / Meter-HP frequency. Widths match
-    // the painted captions in paint() (three equal columns).
-    maxcompSlider.setBounds (14, 196, 144, 92);
-    ramptcSlider.setBounds (162, 196, 144, 92);
-    mtrhphzSlider.setBounds (310, 196, 144, 92);
 }
 
 void MakeGainEditor::paint (juce::Graphics& g)
@@ -152,15 +156,16 @@ void MakeGainEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xffc8d2e6));
     g.drawText (deltaText, readouts, juce::Justification::centred);
 
-    // Control captions. Toggle buttons carry their own labels; the
-    // rotaries need name + unit captions here.
+    // Control captions. Toggle switches carry their own captions; the
+    // rotaries need name + unit captions here (positions track the
+    // resized() rotary row above the button strip).
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
-    g.drawText ("MAXCOMP", juce::Rectangle<int> { 14, 290, 144, 16 },
+    g.drawText ("MAXCOMP", juce::Rectangle<int> { 14, 276, 144, 16 },
                 juce::Justification::centred);
-    g.drawText ("RAMP TC", juce::Rectangle<int> { 162, 290, 144, 16 },
+    g.drawText ("RAMP TC", juce::Rectangle<int> { 162, 276, 144, 16 },
                 juce::Justification::centred);
-    g.drawText ("MTR HP FREQ", juce::Rectangle<int> { 310, 290, 144, 16 },
+    g.drawText ("MTR HP FREQ", juce::Rectangle<int> { 310, 276, 144, 16 },
                 juce::Justification::centred);
 
     // Automatable clue (PR-D owner ruling): no text label on Active.
