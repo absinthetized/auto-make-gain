@@ -137,21 +137,20 @@ void MakeGainEditor::resized()
     ramptcSlider.setBounds (162, 178, 144, 92);
     mtrhphzSlider.setBounds (310, 178, 144, 92);
 
-    // Dual-state strip (sliding switches), under the rotaries. Order
-    // (PR-D owner ruling): the two gain-behavior controls couple left
-    // — Active, Freeze — then the mode switches, then Meter HP.
-    const int bw = (468 - 28) / 5;
-    int x = 14;
-    auto placeButton = [&x, bw] (juce::Component& c)
-    {
-        c.setBounds (x, 300, bw, 54);
-        x += bw;
-    };
-    placeButton (activeButton);
-    placeButton (freezeButton);
-    placeButton (metricSwitch);
-    placeButton (responseSwitch);
-    placeButton (mtrhpButton);
+    // Variant-A layout (PR-D, owner): the two modality pills LEAVE the
+    // strip and flank the applied-gain number, aligned to the side
+    // COLUMNS (same x/width as MaxComp + Active on the left, Mtr HP
+    // freq + its checkbox on the right) — the grid reads straight down
+    // on both flanks. Metric describes what the number means, Fast how
+    // it moves. (Same 54px height as the strip controls.)
+    metricSwitch.setBounds (14, 48, 144, 54);
+    responseSwitch.setBounds (310, 48, 144, 54);
+
+    // Checkbox strip, mirrored onto the rotary columns (x/width match
+    // maxcomp/ramptc/mtrhphz above so the column grid is exact).
+    activeButton.setBounds (14, 300, 144, 54);
+    freezeButton.setBounds (162, 300, 144, 54);
+    mtrhpButton.setBounds (310, 300, 144, 54);
 }
 
 void MakeGainEditor::paint (juce::Graphics& g)
@@ -173,8 +172,14 @@ void MakeGainEditor::paint (juce::Graphics& g)
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (30.0f, juce::Font::bold));
     g.setColour (juce::Colour (0xffcfe6c8));   // soft green
-    g.drawText (appliedText, readouts.removeFromTop (44),
+    // Variant A: the number's draw rect is CLAMPED between the two
+    // pill columns (pills at x14..158 / x310..454), so the text can
+    // never slide under a pill — worst case it clips, never overlaps.
+    g.drawText (appliedText, juce::Rectangle<int> { 164, 60, 140, 44 },
                 juce::Justification::centred);
+    // The number row is consumed separately (drawn clamped above) —
+    // it stays in the chain so the delta slices below keep their slot.
+    readouts.removeFromTop (44);
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
     g.drawText (metricCaption, readouts.removeFromTop (16),
