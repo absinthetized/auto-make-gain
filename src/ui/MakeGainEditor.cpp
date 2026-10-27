@@ -154,8 +154,14 @@ void MakeGainEditor::paint (juce::Graphics& g)
                 juce::Justification::centred);
     g.drawText ("MTR HP FREQ", juce::Rectangle<int> { 310, 290, 144, 16 },
                 juce::Justification::centred);
-    g.drawText ("AUTOMATABLE", juce::Rectangle<int> { 14, 120, 84, 12 },
-                juce::Justification::centred);
+
+    // Automatable clue (PR-D owner ruling): no text label on Active.
+    // The ONE automatable parameter carries a thin amber border instead
+    // — a per-component painted frame (drawn AFTER the component, so it
+    // reads as "this control has a role", not as the button's own face).
+    g.setColour (juce::Colour (0xffd9a441));   // warm amber accent
+    g.drawRoundedRectangle (activeButton.getBounds().toFloat().reduced (2.0f),
+                            6.0f, 2.0f);
 
     // Status bar: a dedicated, differently-colored strip at the bottom
     // (owner feedback: status is not a control). The processor composes
