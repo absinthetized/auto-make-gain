@@ -176,13 +176,33 @@ void MakeGainEditor::paint (juce::Graphics& g)
     g.drawRoundedRectangle (activeButton.getBounds().toFloat().reduced (2.0f),
                             6.0f, 2.0f);
 
-    // Status bar: a dedicated, differently-colored strip at the bottom
-    // (owner feedback: status is not a control). The processor composes
-    // the string from engine state — freeze reports FIRST (FR-24).
+    // Status bar (PR-D): the band color IS the state light —
+    //   gray : nothing is happening (standby, engine idle);
+    //   green: rolling (engaged, live delta, actuating compensation);
+    //   red  : the aux/sidechain tap is dead (delta unmeasurable);
+    //   ice  : gain frozen (deliberate hold — FR-24).
+    // Color precedence mirrors statusLine's hierarchy: frozen reports
+    // first (the text announces it first), then the sidechain alert,
+    // then rolling, else the gray standby band. Values are darker
+    // cousins of the palette accents so the 13pt text stays readable.
     auto statusStrip = getLocalBounds().removeFromBottom (32);
-    g.setColour (juce::Colour (0xff263238));   // distinct blue-grey band
+    juce::Colour band = juce::Colour (0xff263238);
+    juce::Colour ink  = juce::Colour (0xffe8e4dc);
+    const bool active = processorRef.getApvts()
+                            .getRawParameterValue ("active")->load() > 0.5f;
+    if (processorRef.uiFrozen()) {
+        band = juce::Colour (0xff274a5a);  // ice blue: deliberate hold
+        ink  = juce::Colour (0xffc2e4f2);
+    } else if (processorRef.uiSidechainMissing()) {
+        band = juce::Colour (0xff5a2a2a);  // red: no sidechain signal
+        ink  = juce::Colour (0xfff0c8c8);
+    } else if (active && processorRef.uiDeltaValid()) {
+        band = juce::Colour (0xff33513a);  // green: compensating
+        ink  = juce::Colour (0xffcfe6c8);
+    }
+    g.setColour (band);
     g.fillRect (statusStrip);
-    g.setColour (juce::Colour (0xffe8e4dc));
+    g.setColour (ink);
     g.setFont (juce::FontOptions (13.0f));
     g.drawText (processorRef.statusLine(), statusStrip.reduced (8, 0),
                 juce::Justification::centred);
