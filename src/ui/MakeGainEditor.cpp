@@ -1,6 +1,8 @@
 #include "ui/MakeGainEditor.h"
 #include "plugin/MakeGainProcessor.h"
 
+#include <algorithm>
+
 MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
     // AudioProcessorEditor takes a pointer to its processor so the base
     // class can route parameter changes/lifecycle internally; we also keep
@@ -84,10 +86,35 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
 
     // 10 Hz readout refresh: atomics only, no locks, no audio-thread work.
     startTimerHz (10);
+
+    applyZoom (static_cast<double> (apvts.getRawParameterValue ("zoom")->load()));
+}
+
+// FR-27 transform plumbing: zoom maps 0..4 -> the 5 step factors and
+// applies SCALE as a uniform whole-window transform + matching setSize
+// (the editor's rect is its SCALED on-host box; the drawn content keeps
+// working in logical 468x400 coordinates, so every hand-mirrored
+// paint() rectangle stays valid at any zoom). Called from the ctor and
+// then by the 10 Hz poll whenever the persisted selection changes.
+void MakeGainEditor::applyZoom (double rawIndex)
+{
+    static constexpr double levels[5] = { 0.75, 1.0, 1.25, 1.5, 2.0 };
+    const int idx = static_cast<int> (std::clamp (rawIndex, 0.0, 4.0));
+    const double z = levels[idx];
+    if (z == currentZoom) return;
+    currentZoom = z;
+    setTransform (juce::AffineTransform().scaled (z));
+    setSize (juce::roundToInt (468 * z), juce::roundToInt (400 * z));
 }
 
 void MakeGainEditor::timerCallback()
 {
+    // Zoom poll (FR-27): the persisted selection can change through the
+    // dropdown, a session reload, or a host-side param nudge — the 10 Hz
+    // poll re-applies any change; unchanged values are cheap no-ops.
+    applyZoom (static_cast<double> (processorRef.getApvts()
+         .getRawParameterValue ("zoom")->load()));
+
     const bool valid = processorRef.uiDeltaValid();
     const bool rms = processorRef.getApvts()
                          .getRawParameterValue ("metric")->load() > 0.5f;
