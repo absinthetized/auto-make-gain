@@ -69,6 +69,19 @@ MakeGainEditor::MakeGainEditor (MakeGainProcessor& p)
     mtrhphzAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         apvts, "mtrhphz", mtrhphzSlider);
 
+    // FR-27 zoom: the dropdown lists the same 5 steps as the choice
+    // param (item IDs 1..5 == param indices 0..4, the attachment's
+    // mapping convention); default "100%" comes from the param itself.
+    zoomBox.addItem ("75%", 1);
+    zoomBox.addItem ("100%", 2);
+    zoomBox.addItem ("125%", 3);
+    zoomBox.addItem ("150%", 4);
+    zoomBox.addItem ("200%", 5);
+    zoomBox.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (zoomBox);
+    zoomAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        apvts, "zoom", zoomBox);
+
     // 10 Hz readout refresh: atomics only, no locks, no audio-thread work.
     startTimerHz (10);
 }
@@ -151,6 +164,10 @@ void MakeGainEditor::resized()
     activeButton.setBounds (14, 300, 144, 54);
     freezeButton.setBounds (162, 300, 144, 54);
     mtrhpButton.setBounds (310, 300, 144, 54);
+
+    // FR-27 zoom dropdown: its slot in the status band's right corner
+    // (paint() trims the status text on the right to match).
+    zoomBox.setBounds (getWidth() - 94, getHeight() - 29, 86, 25);
 }
 
 void MakeGainEditor::paint (juce::Graphics& g)
@@ -237,7 +254,11 @@ void MakeGainEditor::paint (juce::Graphics& g)
     g.fillRect (statusStrip);
     g.setColour (ink);
     g.setFont (juce::FontOptions (13.0f));
-    g.drawText (processorRef.statusLine(), statusStrip.reduced (8, 0),
+    // The status text shares the band with the FR-27 zoom selector:
+    // its draw area is trimmed on the right so the two never collide.
+    auto textArea = statusStrip.reduced (8, 0);
+    textArea.removeFromRight (88);   // the zoom dropdown's slot
+    g.drawText (processorRef.statusLine(), textArea,
                 juce::Justification::centred);
 }
 

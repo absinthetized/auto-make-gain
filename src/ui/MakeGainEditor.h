@@ -80,6 +80,14 @@ private:
     };
     BooleanCheckboxLnf booleanCheckboxLnf;
 
+    // FR-27 zoom selector: a plain dropdown over the 5-step choice
+    // parameter (ComboBoxAttachment = native param plumbing, the same
+    // pattern the rotary sliders use). The editor owns the transform
+    // logic; the param merely carries the persisted selection.
+    juce::ComboBox zoomBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        zoomAttach;
+
     // Switch buttons over 2-choice parameters (no attachment type maps
     // choice→button, so the glue is manual both ways — see timerCallback
     // and the on-click capture in the constructor).
