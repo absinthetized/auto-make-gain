@@ -34,6 +34,7 @@ MakeGainProcessor::MakeGainProcessor()
     freezeParam   = apvts.getRawParameterValue ("freeze");
     mtrhpParam    = apvts.getRawParameterValue ("mtrhp");
     mtrhphzParam  = apvts.getRawParameterValue ("mtrhphz");
+    zoomParam     = apvts.getRawParameterValue ("zoom");
 }
 
 // Parameter layout (PR-B3, stage 2). UX-Q4 stands: Active is the ONLY
@@ -92,6 +93,15 @@ MakeGainProcessor::createParameterLayout()
         juce::NormalisableRange<float> (20.0f, 400.0f, 1.0f, 0.5f), 150.0f,
         juce::AudioParameterFloatAttributes().withAutomatable (false));
     layout.add (std::move (mtrhphz));
+
+    // FR-27 (A4): manual panel zoom, 5 discrete steps, default 100%.
+    // Non-automatable UI-only param (FR-22 class); the editor turns
+    // the selection into a whole-window transform (see its commit).
+    auto zoom = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "zoom", 1 }, "Zoom",
+        juce::StringArray { "75%", "100%", "125%", "150%", "200%" }, 1,
+        juce::AudioParameterChoiceAttributes().withAutomatable (false));
+    layout.add (std::move (zoom));
 
     return layout;
 }

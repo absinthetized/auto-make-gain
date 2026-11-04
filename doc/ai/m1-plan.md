@@ -401,6 +401,42 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
    number in the side columns (grid: MaxComp+Active / MtrHP+its
    checkbox), number clamped center, checkboxes stay in the strip on
    the rotary columns. Owner-approved alignment ("feels good").
+
+## PR-E plan (2026-10-26, branch `pr-e-panel-scale`): panel zoom, FR-27
+
+Owner gate (after the M1/Asahi small-UI report): different OSes/DAWs
+scale differently — manual zoom is almost mandatory. Rulings: manual
+zoom dropdown (75/100/125/150/200 %), default = JUCE-native 100 % (no
+transform); NO auto-DPI guessing (platforms disagree — the user is the
+judge); zoom joins the grammar (visual-grammar.md §4 + FR A4).
+- `fc7ced7` docs: FR-27 amendment A4
+- `304884c` docs: grammar §4 zoom rule
+- `ca24397` plugin+ui: zoom param + status-corner dropdown (attachment,
+  status text trimmed right; no transform yet)
+- `daf2ba3` ui: transform plumbing (applyZoom: index→factor map,
+  whole-window transform + setSize; ctor + 10 Hz poll re-apply)
+- `c9be6d2` ui: **zoom moves to a transformable child panel
+  (MainPanel)** — v1 whole-window transform broken by construction;
+  owner smoke confirmed (content did not scale, clipped on shrink,
+  black bands). JUCE verdict, verified in
+  `juce_AudioProcessorEditor.cpp`: the editor's OWN transform is
+  host-reserved machinery (jassert `getTransform() ==
+  hostScaleTransform`; "applying your own transform to the editor
+  will obliterate it"). Sanctioned pattern (`ComponentTransformsDemo.h`):
+  transform a CHILD. Refactor, editor files only: shell keeps zoom
+  state + 10 Hz poll; all visual members verbatim-relocated into a
+  nested `MainPanel` child (plain Component, logical 468x400, zero
+  coordinate edits — the transform scales the whole surface, so
+  grammar clamps hold at every step). Smoke-found fix folded in: the
+  ctor calls `setSize(468,400)` explicitly — the unchanged-zoom
+  guard is a no-op when stored zoom is already the default 100%,
+  which had left the editor 0x0 (empty frame in Reaper). Owner
+  verified in Reaper: renders + zoom scales the whole content.
+No tests added: widget layer (DSP suite unchanged); owner smoke covers
+persistence/window sizing (was broken, now confirmed fixed). Pending
+on the branch: docker lanes (both re-run on `c9be6d2` after the
+amd64 lane famously swept the mid-refactor WIP tree — its one error
+was the WIP state, not a regression), pen refresh, owner push/merge.
    Residue dropped by owner decision during re-scope: two-column +
    resizable layout (the panel feels better as-is). Known limitation
    kept knowingly: panel is fixed-size 468x400 and the painter's

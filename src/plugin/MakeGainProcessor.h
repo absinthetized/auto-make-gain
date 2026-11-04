@@ -133,6 +133,7 @@ private:
     std::atomic<float>* freezeParam   = nullptr;  // FR-24 lock
     std::atomic<float>* mtrhpParam    = nullptr;  // metering HP enable
     std::atomic<float>* mtrhphzParam  = nullptr;  // metering HP corner Hz
+    std::atomic<float>* zoomParam     = nullptr;  // FR-27: 0=75% .. 4=200%
 
     // The A2 delta engine. Unique pointer (not member) because the sample
     // rate is only known at prepareToPlay: the engine owns two meters that

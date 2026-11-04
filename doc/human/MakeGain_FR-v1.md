@@ -339,3 +339,20 @@ crossover/analysis practice. Honest semantics: with HP engaged, the
 compensation targets the *filtered* loudness interval (documented
 readout implication); symmetric wet/dry filtering keeps musical level
 motion out of the delta (10.2 invariant unchanged).
+
+### 10.10 Amendment A4 — panel zoom (2026-10-26, owner ruling)
+
+**FR-27 Manual panel zoom.** The plugin window offers a **manual zoom**
+control in the status-bar corner: 75 / 100 / 125 / 150 / 200 %. The
+default is **100 % = native rendering, no transform** — precisely what
+the host/OS stack draws today; zoom only *multiplies* on top of the
+platform's own sizing logic (no auto-DPI guessing: OSes and DAWs report
+the desktop scale differently, and the user is the judge of what fits
+his eyes — the manual control is the whole feature).
+
+Mechanics: the editor applies a uniform whole-window transform and grows
+the window accordingly; all panel content (painted text included)
+scales identically, and no per-widget coordinates are recomputed.
+The zoom level persists with the session as a non-automatable UI-only
+parameter (FR-22 class). The design contract lives in the visual
+grammar doc (column grid / hero protections apply after transform).
