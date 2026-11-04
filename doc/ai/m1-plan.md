@@ -401,6 +401,23 @@ rebuild fresh when docker daemon returns), pen bundle refresh at tip.
    number in the side columns (grid: MaxComp+Active / MtrHP+its
    checkbox), number clamped center, checkboxes stay in the strip on
    the rotary columns. Owner-approved alignment ("feels good").
+
+## PR-E plan (2026-10-26, branch `pr-e-panel-scale`): panel zoom, FR-27
+
+Owner gate (after the M1/Asahi small-UI report): different OSes/DAWs
+scale differently — manual zoom is almost mandatory. Rulings: manual
+zoom dropdown (75/100/125/150/200 %), default = JUCE-native 100 % (no
+transform); NO auto-DPI guessing (platforms disagree — the user is the
+judge); zoom joins the grammar (visual-grammar.md §4 + FR A4).
+- `fc7ced7` docs: FR-27 amendment A4
+- `304884c` docs: grammar §4 zoom rule
+- `ca24397` plugin+ui: zoom param + status-corner dropdown (attachment,
+  status text trimmed right; no transform yet)
+- `daf2ba3` ui: transform plumbing (applyZoom: index→factor map,
+  whole-window transform + setSize; ctor + 10 Hz poll re-apply)
+No tests added: widget layer (DSP suite unchanged); owner smoke covers
+persistence/window sizing. Pending on the branch: docker lanes (arm64
+run at the tip; amd64 next), pen refresh, owner smoke + merge.
    Residue dropped by owner decision during re-scope: two-column +
    resizable layout (the panel feels better as-is). Known limitation
    kept knowingly: panel is fixed-size 468x400 and the painter's
