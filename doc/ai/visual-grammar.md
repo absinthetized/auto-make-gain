@@ -70,8 +70,19 @@ Whatever flanks the hero must **clamp its draw rect** to its own column
 space: a text draw (the big number) never slides under a neighboring
 component. The worst case is clipping (it reads as "the string is
 long"), never overlap (it reads as "the panel is broken"). Same for a
-future analyser: it spans its columns, and the number yields font/or
+future analyser: it spans its columns, and the number yields font or
 spans fewer — re-evaluate the estate, keep the rectangles disjoint.
+
+**Panel zoom (A4 / FR-27)** extends every rule above rather than
+escaping them: zoom is a **manual** control (75 / 100 / 125 / 150 /
+200 %, default 100 % = native rendering, no transform) applied as a
+uniform **whole-window transform**. Everything inside — colors,
+columns, hero clamps, caption discipline — scales as one surface, so
+the grammar holds at every zoom step. No auto-DPI guessing: OSes and
+DAWs disagree about desktop scale, and the user is the judge of what
+fits his screen (owner ruling: scaling is almost mandatory *because*
+platforms differ). The zoom selector lives in the status-bar corner —
+on the status band as decor — staying out of the strip's grammar.
 
 ## 5. Affordances are honest — dependent controls grey
 
