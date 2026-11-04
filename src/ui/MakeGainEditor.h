@@ -16,10 +16,11 @@
 //   * The editor is disposable: hosts destroy/recreate it freely (window
 //     close/reopen, project reload). The processor survives.
 //
-// PR-C panel (A3): five toggles (Active, Metric switch, Freeze, Meter
-// HP + the Response switch), three rotaries (MaxComp, Ramp tc, Meter
-// HP freq), readouts (applied gain + chain delta + per-tap loudness)
-// and the honest status bar.
+// ZOOM architecture (FR-27): the editor's OWN transform is host-reserved
+// machinery (JUCE: "applying your own transform to the editor will
+// obliterate it") — so everything visual lives on the MainPanel CHILD,
+// and zoom = transform the child + resize the (untransformed) editor
+// around it. The panel always works in logical 468x400 coordinates;
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -31,17 +32,47 @@ class MakeGainEditor : public juce::AudioProcessorEditor,
 {
 public:
     explicit MakeGainEditor (MakeGainProcessor& p);
-
-    // Full-window custom paint: dark theme + the text readouts (their
-    // strings refresh from the processor's atomics in timerCallback).
-    void paint (juce::Graphics&) override;
-    void resized() override;   // control layout (buttons + rotaries)
+    ~MakeGainEditor() override;   // needed: MainPanel is an incomplete
+                                  // type until the cpp defines it (rule:
+                                  // unique_ptr member owns the child)
 
 private:
-    void timerCallback() override;   // refresh readout strings + repaint
+    class MainPanel;              // everything visual, logical 468x400
+    std::unique_ptr<MainPanel> panel;
 
-    // Reference (not pointer!): editors are destroyed with their processor
-    // in well-behaved hosts; JUCE's leak detector flags dangling UI state.
+    MakeGainProcessor& processorRef;   // the shell's own handle (zoom poll)
+
+    // The shell's 10 Hz poll: zoom re-apply + panel.refresh() (readout
+    // strings, switch reflection, dependent greying).
+    void timerCallback() override;
+
+    // FR-27 zoom state: the transform factor actually active (avoids
+    // re-transforming on every poll tick of applyZoom's guard).
+    double currentZoom = 1.0;
+    void applyZoom (double rawIndex);   // 0..4 -> the 5 step factors
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainEditor)
+};
+
+// ---------------------------------------------------------------------------
+// MainPanel — everything visual (the PR-D grammar: grid, pills, status
+// light). A plain Component, NOT the editor: its transform is OURS to
+// use (the editor's is the host's). Runs in logical 468x400 space.
+// ---------------------------------------------------------------------------
+class MakeGainEditor::MainPanel : public juce::Component
+{
+public:
+    explicit MainPanel (MakeGainProcessor& p);
+
+    void paint (juce::Graphics&) override;   // full-window custom paint
+    void resized() override;                 // control layout (grid)
+
+    // The editor's 10 Hz poll lands here: refresh readout strings,
+    // reflect choice params onto switches, grey dependents, repaint.
+    void refresh();
+
+private:
+    // Reference (not pointer!): the panel dies with its editor.
     MakeGainProcessor& processorRef;
 
     // Attached buttons (bool parameters: ButtonAttachment does both
@@ -80,22 +111,9 @@ private:
     };
     BooleanCheckboxLnf booleanCheckboxLnf;
 
-    // FR-27 zoom selector: a plain dropdown over the 5-step choice
-    // parameter (ComboBoxAttachment = native param plumbing, the same
-    // pattern the rotary sliders use). The editor owns the transform
-    // logic; the param merely carries the persisted selection.
-    juce::ComboBox zoomBox;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
-        zoomAttach;
-
-    // Applied zoom state: the transform factor actually active (avoids
-    // re-transforming on every poll tick).
-    double currentZoom = 1.0;
-    void applyZoom (double rawIndex);   // 0..4 -> the 5 step factors
-
     // Switch buttons over 2-choice parameters (no attachment type maps
-    // choice→button, so the glue is manual both ways — see timerCallback
-    // and the on-click capture in the constructor).
+    // choice→button, so the glue is manual both ways — see refresh()
+    // and the on-capture in the constructor).
     juce::ToggleButton metricSwitch;    // LUFS (S) / dB RMS
     juce::ToggleButton responseSwitch;  // Short (3 s) / Fast (0.4 s)
 
@@ -110,9 +128,17 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         maxcompAttach, ramptcAttach, mtrhphzAttach;
 
-    // Readout strings refreshed by the Timer, drawn in paint().
+    // FR-27 zoom selector: a plain dropdown over the 5-step choice
+    // parameter (ComboBoxAttachment = native param plumbing, the same
+    // pattern the rotary sliders use). The EDITOR owns the transform
+    // logic; the param merely carries the persisted selection.
+    juce::ComboBox zoomBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        zoomAttach;
+
+    // Readout strings refreshed by refresh(), drawn in paint().
     juce::String appliedText, deltaText;
     juce::String metricCaption { "CHAIN DELTA" };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MakeGainEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
 };
