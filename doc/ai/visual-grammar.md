@@ -131,3 +131,10 @@ m1-plan log keeps the rationale that survives refactors.
   (rule 3, rule 4).
 - Freeze locks Meter HP — owner ruling with the false-alarm rationale
   (rule 5).
+- Zoom transform on a child, never on the editor — FR-27 v1 applied
+  the scale to the editor itself; content clipped / did not scale
+  (owner smoke). JUCE reserves the editor's transform for host scale
+  (jassert + explicit warning in `juce_AudioProcessorEditor.cpp`);
+  the sanctioned pattern is a transformed child panel, editor at
+  identity (rule 4: the grammar operates in logical coordinates and
+  the whole surface scales, so clamps survive every step).
