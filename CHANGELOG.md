@@ -2,11 +2,13 @@
 
 One section per tag (`doc/ai/release-model.md`). Entries are written at
 tag time by the owner; sections below are prepared in advance and frozen
-at the tag commit. Entries carry only facts (what appears, changes,
-disappears for the *user*) — rationale and process live in the ledgers
+at the tag commit (draft headings, e.g. `Unreleased`, contain
+agent-prepared material the owner reviews, strikes and retunes at tag
+time). Entries carry only facts (what appears, changes, disappears for
+the *user*) — rationale and process live in the ledgers
 (`doc/ai/`), not here.
 
-## Unreleased (M1, PRs B–F — agent-drafted, owner reviews at tag time)
+## Unreleased
 
 ### Added
 
@@ -45,7 +47,7 @@ disappears for the *user*) — rationale and process live in the ledgers
   marked with an amber ring.
 
 
-## v0.1.0 — walking skeleton (tag pending, owner's cut)
+## v0.1.0
 
 ### Added
 
