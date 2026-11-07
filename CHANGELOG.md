@@ -6,7 +6,7 @@ and freezes the section at the tag commit. Entries carry only facts
 (what appears, changes, disappears for the *user*) — rationale and
 process live in the ledgers (`doc/ai/`), not here.
 
-## Unreleased
+## v0.2.0
 
 ### Added
 
