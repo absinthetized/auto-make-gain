@@ -176,7 +176,8 @@ The project therefore uses a **two-tier loop**:
 
 | Tier | What it covers | Frequency |
 |---|---|---|
-| **Tier 1 — Docker on the mac** | Linux configure + build + ctest (incl. sanitizer lane) inside an arm64 Fedora container *natively* on Apple Silicon — no emulation | every commit |
+| **Tier 1 — Docker on the mac, arm64 lane** | Linux configure + build + ctest (incl. sanitizer lane) inside an arm64 Fedora container *natively* on Apple Silicon — no emulation | every commit |
+| **Tier 1 — Docker on the mac, amd64 lane (`--x64`)** | same inside an amd64 container — runs under Rosetta emulation on Apple Silicon (§8.2; exercise of DSP kernels against different codegen/libm) | on-demand / pre-PR (slow: first provisioning ~30–90 min, later runs layer-cached) |
 | **Tier 2 — bare-metal Asahi** | the oracle for what Tier 1 cannot see: bootstrap on real hardware, DAW load (Reaper/Ardour), PipeWire audio | per milestone |
 
 **Prerequisite:** any arm64-capable Docker environment (OrbStack, Docker
