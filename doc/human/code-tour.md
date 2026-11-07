@@ -4,8 +4,7 @@
 > plugin format) should be able to read this repo and know where things
 > happen, *without* prior framework knowledge. Maintained per AGENTS.md
 > rule 7 — kept current **at milestone merges** (see `doc/ai/decisions.md`).
-> Last updated:
-> 2026-10-19 (M1 PR-A + x64 lane merged).
+> Last updated: 2026-11-07 (M1 complete through PR-D + PR-E).
 
 ## The one shock: **there is no `main()`**
 
@@ -27,23 +26,26 @@ host (Reaper) ──loads──▶ VST3/CLAP/AU wrapper (JUCE-generated)
                               │ calls createPluginFilter()
                               ▼
                         MakeGainProcessor ──▶ (createEditor) ──▶ MakeGainEditor
-                        (audio thread)                        (UI thread)
+                        (audio thread)             │                       (UI thread)
+                                                   ▼
+                                              MainPanel (the visible child;
+                                              its transform = panel zoom)
 ```
 
 The build system (`juce_add_plugin`) produces one bundle per format from
 the *same* compiled processor — that's the whole multi-format payoff.
 
-## File map (M1, PR-A + x64 lane)
+## File map (M1 complete)
 
 | Path | Role |
 |---|---|
-| `src/plugin/MakeGainProcessor.h/.cpp` | The audio-thread brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Lifecycle contract documented at the top of the `.h`. Still passthrough — the dsp layer below exists and is tested but is **not wired** yet (wiring = M1 PR-B). |
-| `src/ui/MakeGainEditor.h/.cpp` | The window. UI thread; disposable; talks to the processor via thread-safe channels (parameters come with PR-B). Bottom label doubles as a build-state check: it names what the loaded binary actually contains. |
-| `src/dsp/` | The JUCE-free DSP layer (**landed in PR-A, not yet wired**): `k_weighting.{h,cpp}` — the ITU BS.1770 K-weighting cascade as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — the dual-metric rolling window (short-term LUFS + unweighted dB RMS off the same 100 ms sub-block ring). Pure C++17, no framework types, double-precision internals. |
-| `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness. Wired from `CMakeLists.txt` (`makegain_tests`). |
+| `src/plugin/MakeGainProcessor.h/.cpp` | The audio-thread brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Owns the APVTS parameters (see `createParameterLayout`: Active is the only automatable one; the rest are UI-only by design, including zoom) and the thread-safe status atomics the UI polls. The internal-sidechain AGC (FR-10-A2): wet vs dry aux, per 100 ms slot, ramped by `gain_computer`. |
+| `src/ui/MakeGainEditor.h/.cpp` | The window, split by PR-E: `MakeGainEditor` = shell (owns `Timer`@10 Hz + FR-27 zoom: `applyZoom` transforms the **child**, never the editor — JUCE reserves the editor's transform for host scaling); `MakeGainEditor::MainPanel` = child component holding **everything visual** in logical 468×400 space. PR-D's visual grammar lives here: two control skins by control *nature* (modality pill vs on/off checkbox, both drawn in hand-rolled LookAndFeel overrides), the automatable-ring amber mark, dependent greying, the status band (gray/green/red/ice). |
+| `src/dsp/` | The JUCE-free DSP layer (wired in PR-B/C): `k_weighting.{h,cpp}` — ITU BS.1770 K-weighting as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — dual-metric rolling window (short-term LUFS + unweighted dB RMS off the same 100 ms sub-block ring); `gain_computer.{h,cpp}` — the FSM + clamp + one-pole ramp + silence-hold that turns the delta into the applied gain. Pure C++17, no framework types, double-precision internals. |
+| `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness, gain-computer behavior (ramp, clamp, freeze/park). Wired from `CMakeLists.txt` (`makegain_tests`). |
 | `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. |
-| `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 8): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
+| `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 9): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
 | `docker/fedora-dev.Dockerfile` | The pinned fedora:44 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |
 | `cmake/deps-pins.cmake` | The pinned third-party versions (JUCE, clap-juce-extensions, Catch2). |
 
@@ -58,15 +60,21 @@ layers the CLAP wrapper over the same code (JUCE has no native CLAP).
 `COPY_PLUGIN_AFTER_BUILD` drops fresh bundles into your user's plug-in
 folders so Reaper sees new builds without manual copying.
 
-## Where the DSP plugs in next (status after PR-A)
+## Where the interesting JUCE lessons live (guaranteed non-obvious)
 
-The `src/dsp/` layer now exists and carries the FR contract's
-measurement half (K-weighting, LUFS/RMS metering — TS §3), unit-tested
-green on macOS arm64, Linux arm64 (native) and Linux amd64 (Rosetta —
-incl. sanitizers). The *wiring* is the remaining M1 half (PR-B): the
-processor will instantiate the meter, tap the blocks, run the gain
-computer, and publish meters to the editor. Until that lands the signal
-path is honest passthrough — which the editor's status label states.
+- **The editor's `setTransform` is host-reserved**: JUCE jasserts the
+  editor keeps `hostScaleTransform`; applying your own scale there
+  breaks window sizing in hosts. Panel zoom therefore transforms the
+  `MainPanel` **child** and sizes the shell around it — see
+  `applyZoom` in `MakeGainEditor.cpp` and the doc header above it.
+- **Attachment-free parameter wiring**: choice parameters have no
+  ToggleButton attachment type — the two modality switches are manual
+  glue (`setValueNotifyingHost` on click, `setToggleState(…,
+  dontSendNotification)` in the poll). The lesson is at the wiring
+  sites, commented.
+- **Anchor constants**: the K-weighting +0.691 dB ~1 kHz anchor and the
+  LUFS −0.691 offset pair are load-bearing for the metric's absolute
+  level — the goldens in `tests/dsp/` pin them.
 
 ## Going deeper (official docs)
 
