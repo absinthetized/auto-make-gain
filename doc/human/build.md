@@ -127,14 +127,47 @@ discovery problems** in [`usage.md`](usage.md).
 Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are
 deliberate, not incidental (AGENTS.md policy).
 
-**Dependencies of record** (see `doc/ai/decisions.md`): this section +
-`scripts/bootstrap.sh` (the executable source for *development package*
-lists, incl. the sanitizer runtimes the sanitize lane links against).
-The Linux header-map authority is JUCE's official
-[`docs/Linux Dependencies.md`](https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md)
-(external to this repo; comments elsewhere citing it by name mean that
-upstream file, never a repo-local one). No separate in-repo
-`dependencies.md` is maintained — see the decision register.
+### How a pin moves
+
+Pins live in exactly one file (`cmake/deps-pins.cmake`) and never move
+as a side effect of ordinary work. A pin bump is its own commit, says
+*why* it moved, and passes the same green gates as code changes — the
+Docker lanes of §8 exercise the exact fetched versions on Linux, so a
+bad pin shows up loudly, not silently.
+
+### Where dependency knowledge lives
+
+Two places, both kept executable so they cannot rot:
+
+1. **Third-party pins** — the table above (what fetches at configure
+   time, per `FetchContent`/pin file).
+2. **Development packages** — `scripts/bootstrap.sh` is the single
+   source for per-distro package lists (macOS Homebrew-Xcode path,
+   Fedora/Debian/Arch). `docker/fedora-dev.Dockerfile` **executes
+   that same script** inside the image build, so the container cannot
+   drift from the script's list by construction. The sanitizer
+   runtimes are explicit entries in it — the sanitize lane links
+   against them at test time.
+
+### The Linux header map
+
+The **authority for which Linux dev headers JUCE actually requires**
+is JUCE's own upstream document,
+<https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md>.
+It is external to this repo on purpose: comments in `bootstrap.sh`,
+`CMakeLists.txt` and this guide that cite "the Linux dependencies doc"
+mean *that upstream file* — never a repo-local copy or summary, which
+would drift from JUCE releases. Consult it first for every
+new platform-dependent surprise, before improvising package lists.
+
+### What deliberately does not exist
+
+There is **no in-repo `dependencies.md`**. A third list (after this
+section and `bootstrap.sh`) had two sources to keep in sync and no
+compilation pressure to stay honest — the decision register
+(`doc/ai/decisions.md`) records the ruling. If you add a dependency,
+its pin goes in `deps-pins.cmake` and its package in `bootstrap.sh`;
+docs follow those two, never the other way round.
 
 ## 8. Linux compile/test inner loop on the Mac (Docker)
 
