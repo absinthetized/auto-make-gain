@@ -86,8 +86,8 @@ filesystems. (Signing/notarization is a later-milestone goal.)
 ## 6. Troubleshooting (the friction this setup actually produces)
 
 Build-environment issues belong here; **code-level gotchas** live in
-[`contributing.md`](contributing.md) ("coding gotchas"), and **host
-discovery problems** in [`usage.md`](usage.md).
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md) ("coding gotchas"), and
+**host discovery problems** in [`usage.md`](usage.md).
 
 1. **"first configure takes forever"** — JUCE is a large shallow clone +
    juceaide build; >15 min on slow links is documented expectation. On

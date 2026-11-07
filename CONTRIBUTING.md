@@ -2,8 +2,8 @@
 
 How the repository works if you want to propose changes — in one page.
 For the *plugin's design* go to the frozen FR
-([`MakeGain_FR-v1.md`](MakeGain_FR-v1.md)); for a line-by-line code walk,
-[`code-tour.md`](code-tour.md).
+([`MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md)); for a line-by-line
+code walk, [`code-tour.md`](doc/human/code-tour.md).
 
 ## Assumptions the codebase stands on
 
@@ -19,7 +19,7 @@ For the *plugin's design* go to the frozen FR
    GREEN subjects), so every behavior lands with its proof.
 4. **Docker containment.** Linux builds/tests run only through the
    committed lane scripts (`scripts/docker-check.sh`), never raw system
-   tooling — see [`build.md`](build.md) §8.
+   tooling — see [`build.md`](doc/human/build.md) §8.
 5. **License: AGPLv3.** Everything contributed here inherits it.
 
 ## Architecture in four sentences
@@ -69,8 +69,8 @@ cost you an afternoon:
   a value *exactly equal* to a float you asserted "not-to-equal".
   Tolerance-based Catch2 `CHECK`s only.
 - **Incident notes get absorbed, never accumulated**: compile/runtime
-  friction lives in `build.md` §6 (environment) or this page (code);
-  loose `.txt` logs at the repo root are not kept.
+  friction lives in `doc/human/build.md` §6 (environment) or this page
+  (code); loose `.txt` logs at the repo root are not kept.
 
 ## What the maintainer gates
 
@@ -84,7 +84,7 @@ code", not "code, then justify".
 
 The full collaboration contract (including the AI agent's rules:
 commit cadence, eyeball gates, docs split) is
-[`AGENTS.md`](../../AGENTS.md); the running decision register is
-[`doc/ai/decisions.md`](../ai/decisions.md). Human-facing docs under
-`doc/human/` are deliberately snapshot-only — history lives in the
-ledgers and git, not in them.
+[`AGENTS.md`](AGENTS.md) — right beside this file; the running
+decision register is [`doc/ai/decisions.md`](doc/ai/decisions.md).
+The human docs under `doc/human/` are deliberately snapshot-only
+(rule 12) — history lives in the ledgers and git, not in them.

@@ -23,7 +23,7 @@ Platforms: macOS arm64, Linux aarch64 (Fedora Asahi), Linux x86_64
 | 1 | **use the plugin** in my DAW — load it, route it, DAW-specific quirks | [`doc/human/usage.md`](doc/human/usage.md) |
 | 2 | **install** a build I received as a bundle (unsigned) or onto a bare machine | [`doc/human/install.md`](doc/human/install.md) |
 | 3 | **build it from source** on a fresh machine | [`doc/human/build.md`](doc/human/build.md) |
-| 4 | **contribute** — assumptions, architecture, the working rhythm | [`doc/human/contributing.md`](doc/human/contributing.md) |
+| 4 | **contribute** — assumptions, architecture, the working rhythm | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | 5 | **read the internals** — a framework-first tour of the code (new to JUCE?) | [`doc/human/code-tour.md`](doc/human/code-tour.md) |
 | — | know what it must do — the frozen behavioral contract | [`doc/human/MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md) |
 

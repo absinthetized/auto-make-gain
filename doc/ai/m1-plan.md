@@ -477,7 +477,10 @@ Depth ladder landed (7 commits, all docs-only):
   stay resolvable); compile meat intact
 - `c4de06e` `contributing.md` — NEW level 4: assumptions,
   architecture, rhythm, what the maintainer gates (not an AGENTS.md
-  rehash)
+  rehash). Owner follow-up: moved to the repo root as
+  `CONTRIBUTING.md` (README/AGENTS/LICEN SE neighborhood — GitHub's
+  conventional spot); inbound pointers in README + build.md §6
+  updated with it.
 - `8fa7353` `code-tour.md` freshness pass — file map + entry chain
   current through PR-D/PR-E (the rule-7 merge-time currency owed)
 
