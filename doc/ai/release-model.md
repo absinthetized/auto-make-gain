@@ -52,9 +52,12 @@ point where proper code signing is decided.
 
 ## CHANGELOG
 
-`CHANGELOG.md` exists from the `v0.1.0` tag commit; one section per tag,
-fed from the commit history (the commit-breakdown discipline makes this
-trivial). Release notes for future Releasesobjects are derived from it.
+`CHANGELOG.md` exists from the `v0.1.0` tag commit; one section per
+tag: the agent drafts entries from the commit history (the
+commit-breakdown discipline makes this trivial), the owner validates
+them (strikes/retunes) and freezes the section at the tag commit —
+fact-only entries; rationale stays in the ledgers. Release notes
+for future releases are derived from it.
 
 ## Protection tightening schedule
 

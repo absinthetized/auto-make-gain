@@ -1,12 +1,10 @@
 # Changelog — MakeGain
 
-One section per tag (`doc/ai/release-model.md`). Entries are written at
-tag time by the owner; sections below are prepared in advance and frozen
-at the tag commit (draft headings, e.g. `Unreleased`, contain
-agent-prepared material the owner reviews, strikes and retunes at tag
-time). Entries carry only facts (what appears, changes, disappears for
-the *user*) — rationale and process live in the ledgers
-(`doc/ai/`), not here.
+One section per tag (`doc/ai/release-model.md`). Entries are drafted
+in advance by the agent; the owner validates them (strikes, retunes)
+and freezes the section at the tag commit. Entries carry only facts
+(what appears, changes, disappears for the *user*) — rationale and
+process live in the ledgers (`doc/ai/`), not here.
 
 ## Unreleased
 
