@@ -1,40 +1,34 @@
 # MakeGain (auto-make-gain)
-my tentative to **vibe-code** an auto-gain DAW plugin — agentic
-development in full: an AI agent plans, writes and comments the code
-under a strict human-sized commit policy, while the human owner freezes
-requirements, rules decisions, runs every machine checkpoint and merges.
 
-**MakeGain** is a DAW plugin that keeps your processing chain's loudness
-steady: train it on the clean signal, then let it automatically compensate
-any gain change introduced by the plugins in front of it
-(behavioral contract: [the frozen FR](doc/human/MakeGain_FR-v1.md)).
+**MakeGain** is a DAW plugin (VST3 + CLAP + AU, JUCE/C++) that keeps your
+processing chain's loudness steady: it listens for the gain differences a
+plugin chain introduces and compensates them automatically, so A/B
+comparisons and level matching stay honest.
 
-- Framework: **JUCE** (C++), formats VST3 + CLAP + AU
-  (see [the tech spec](doc/ai/MakeGain_TS-v0.1.md) for the decision record)
-- Platforms: macOS arm64, Linux aarch64 (Fedora Asahi), Linux x86_64 (best-effort)
-- Licence: **AGPLv3** — see [`LICENSE`](LICENSE)
+*License: **AGPLv3*** — see [`LICENSE`](LICENSE).
+Platforms: macOS arm64, Linux aarch64 (Fedora Asahi), Linux x86_64
+(best-effort).
 
-## How it's verified
-Every Linux compile/test cycle runs through committed container lanes
-(agents may never touch `docker` directly): `scripts/docker-check.sh` for
-the native **arm64** lane, `--x64` for the Rosetta-emulated **amd64**
-lane (details: [`doc/human/build.md` §8](doc/human/build.md)). DSP code is JUCE-free
-and unit-tested separately from the framework on both arches.
+> This repository is also an exercise in **agentic development**: the code
+> is written and documented by an AI agent under a strict human-sized
+> commit policy, while the human owner freezes requirements, rules every
+> decision and merges. That process material lives in `doc/ai/` and
+> [`AGENTS.md`](AGENTS.md); the docs below describe the *plugin as it is
+> now*, not the journey.
 
-## Where to go (docs map)
+## Documentation (read top to bottom as far as your goal takes you)
 
-The docs are split by audience: `doc/human/` for people building or
-reading the plugin, `doc/ai/` for the agent/owner process material
-(plans, decision records, release rules).
+| Level | I want to… | Go to |
+|---|---|---|
+| 1 | **use the plugin** in my DAW — load it, route it, DAW-specific quirks | [`doc/human/usage.md`](doc/human/usage.md) |
+| 2 | **install** a build I received as a bundle (unsigned) or onto a bare machine | [`doc/human/install.md`](doc/human/install.md) |
+| 3 | **build it from source** on a fresh machine | [`doc/human/build.md`](doc/human/build.md) |
+| 4 | **contribute** — assumptions, architecture, the working rhythm | [`doc/human/contributing.md`](doc/human/contributing.md) |
+| 5 | **read the internals** — a framework-first tour of the code (new to JUCE?) | [`doc/human/code-tour.md`](doc/human/code-tour.md) |
+| — | know what it must do — the frozen behavioral contract | [`doc/human/MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md) |
 
-| I want to… | Go to |
-|---|---|
-| **build it** on a fresh machine | [`doc/human/build.md`](doc/human/build.md) |
-| **understand the code** (new to JUCE?) | [`doc/human/code-tour.md`](doc/human/code-tour.md) |
-| **know what it does** — the behavioral contract | [`doc/human/MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md) |
-| **know why it's built this way** — decisions & spec | [`doc/ai/MakeGain_TS-v0.1.md`](doc/ai/MakeGain_TS-v0.1.md) |
-| release / tags / CHANGELOG rules | [`doc/ai/release-model.md`](doc/ai/release-model.md) |
-| work on it **as an AI agent** | [`AGENTS.md`](AGENTS.md) (root — tooling convention) |
-| **know every ruling to date** (owner decisions register) | [`doc/ai/decisions.md`](doc/ai/decisions.md) |
-| see **what changed** per release | [`CHANGELOG.md`](CHANGELOG.md) |
+Agent/owner process material (plans, decision registers, the visual
+grammar, release rules): [`doc/ai/`](doc/ai/) — append-only ledgers by
+design; `doc/human/` above is always the current-state snapshot.
 
+See [`CHANGELOG.md`](CHANGELOG.md) for what changed per release.
