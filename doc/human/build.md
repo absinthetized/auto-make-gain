@@ -85,29 +85,23 @@ filesystems. (Signing/notarization is a later-milestone goal.)
 
 ## 6. Troubleshooting (the friction this setup actually produces)
 
+Build-environment issues belong here; **code-level gotchas** live in
+[`contributing.md`](contributing.md) ("coding gotchas"), and **host
+discovery problems** in [`usage.md`](usage.md).
+
 1. **"first configure takes forever"** — JUCE is a large shallow clone +
    juceaide build; >15 min on slow links is documented expectation. On
    re-configure it is a no-op.
 2. **Metal deprecation warnings on macOS 27** — `MTLResourceStorageModeManaged is deprecated` from the
    SDK matrix vs JUCE 8.0.15. Harmless and cosmetic; zip them when filing build issues.
-3. **`-I` is not recursive** — cross-directory C++ includes must spell the
-   sub-path (`#include "ui/MakeGainEditor.h"`), never a bare basename, unless
-   the file sits at the include-root (`src/`). Repo convention everywhere.
-4. **JUCE abstract-class error names the first unimplemented pure virtual**
-   (`getNumPrograms()` etc.): the AudioProcessor needs a full interface
-   stub even for a no-parameter plugin. Done once; if you subclass
-   again later, copy the stub block.
-5. **clap-juce-extensions: the link target is `clap_juce_extensions`** — no
+3. **clap-juce-extensions: the link target is `clap_juce_extensions`** — no
    `clap-juce-extensions::clap-juce-extensions` ALIAS exists; linking the
    alias name as documented in older forums fails at configure. Also: do
    **not** add `CLAP` to juce_add_plugin FORMATS — the extension lays the
    format over the base target itself.
-6. **Exact-equality on floats in tests** — reference toolchains can
-   produce a value *equal* to the float asserted "not-to-equal":
-   tolerance-based CHECKs only.
-7. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
+4. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
    bootstrap is idempotent; re-run to verify.
-8. **"jmessage: ft2build.h / X11/Xlib.h not found while building juceaide"**:
+5. **"jmessage: ft2build.h / X11/Xlib.h not found while building juceaide"**:
    JUCE's configure-time helper `juceaide` is itself built as a headless
    JUCE app, so even plugin-only targets need the **FreeType + X11 dev
    headers** Linux launch expects — pkg-config probes for
@@ -118,12 +112,9 @@ filesystems. (Signing/notarization is a later-milestone goal.)
    <https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md> —
    consult it for every new platform-dependent surprise before
    improvising package lists.
-9. Repo-hygiene conventions from past incidents: incident notes get
-   absorbed into this guide and never accumulate as loose `.txt` files
-   at the repo root.
-10. **Host discovery problems after a working build** — e.g. "Ardour
-    does not see the CLAP while Reaper does" — are documented in the
-    host-quirks section at the end of [`usage.md`](usage.md).
+6. **Host discovery problems after a working build** — e.g. "Ardour
+   does not see the CLAP while Reaper does" — are documented in the
+   host-quirks section at the end of [`usage.md`](usage.md).
 
 ## 7. Dependency pins (what fetches at configure)
 

@@ -51,6 +51,27 @@ declaratively where possible (`ButtonAttachment`/`SliderAttachment`/
   framework terms" note at its call site; lifecycle contracts are
   stated where the override appears, not assumed.
 
+## Coding gotchas (already paid for here)
+
+Small traps each solved once in this repo — worth knowing before they
+cost you an afternoon:
+
+- **`-I` is not recursive** — cross-directory includes must spell the
+  sub-path: `#include "ui/MakeGainEditor.h"`, never a bare basename,
+  unless the file sits at the include-root (`src/`).
+- **A JUCE abstract-class error names the first unimplemented pure
+  virtual** (`getNumPrograms()` etc.): the `AudioProcessor` needs a
+  full interface stub even for a no-parameter plugin. Done once in
+  `MakeGainProcessor`; if you subclass again later, copy the stub
+  block.
+- **Exact-equality on floats in tests is fragile** — reference
+  toolchains (glibc versions, codegen, libm) can legitimately produce
+  a value *exactly equal* to a float you asserted "not-to-equal".
+  Tolerance-based Catch2 `CHECK`s only.
+- **Incident notes get absorbed, never accumulated**: compile/runtime
+  friction lives in `build.md` §6 (environment) or this page (code);
+  loose `.txt` logs at the repo root are not kept.
+
 ## What the maintainer gates
 
 Design decisions (FR amendments, UI changes against the visual
