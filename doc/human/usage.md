@@ -46,18 +46,40 @@ browser), hit *Rescan*.
 
 ### Plain routing fallback (all hosts)
 
-Any sidechain route your host offers works:
+Any sidechain route your host offers works. Ghost principle: the plugin
+needs a **clean (no-FX) pre-chain copy of the same audio** on its aux
+input. On Reaper, without the TAP:
 
-- **Reaper without the Tap**: a pre-FX send from a clean (no-FX) copy of
-  the track into MakeGain's aux input, channels 3/4 (Target: the
-  MakeGain track). Receiving tracks auto-add channels only for
-  priorities/destinations you set — match the aux pins.
-- **Ardour**: use the plugin's native sidechain input hookup.
+1. **Duplicate the track** (`Ctrl/Cmd+D`), name it something like
+   `Dry Tap`.
+2. **Strip the copy**: remove all FX from it and silence its output
+   (mute it or disable its master send) — it must stay audible *to
+   MakeGain only*, not to the mix.
+3. **Route the copy → MakeGain's track**: on `Dry Tap`, open
+   `Routing`, add a send targeted at the MakeGain track, and set the
+   send's destination **channels 3/4**.
+4. **Channel count**: the MakeGain track must have 4 channels; Reaper
+   raises it automatically when a send targets channels 3/4 — check
+   the track panel's channel knob says `4` before you file a bug.
+5. **MakeGain last** in the FX chain of the original track; engage
+   `Active`. The status band should leave red (no aux signal) and go
+   gray/green.
 
-Caveat of any routed tap: the dry copy is a snapshot of a route, not of
-the source — later edits to the track (gains, more FX up top) can
-diverge from it (a *stale tap*). If your results drift, this is the
-first suspect; the in-chain TAP cannot suffer it.
+For **mono** chains: the aux bus is mono, so send the copy into aux
+**channel 2** instead (or use the mono TAP JSFX, which handles the
+pinning for you).
+
+On **Ardour**, prefer the plugin's native sidechain input hookup —
+click the sidechain element on the plugin's box in the processor list
+and feed it a clean pre-chain region/track. The same clean-copy
+principle and the same stale-tap caveat apply.
+
+Caveat of any routed tap: the dry copy is an independent track, not a
+live view of the original — **later edits to the original (gain
+changes, new FX, item edits) must be mirrored into the copy** or the
+two diverge (a *stale tap*) and the compensation slowly stops making
+sense. If your results drift over time, this is the first suspect;
+the in-chain TAP cannot suffer it.
 
 ### Mono tracks
 
@@ -97,17 +119,20 @@ persisted in the session but not automatable.
 
 ## Host-specific quirks
 
-- **Ardour does not see the CLAP while Reaper does**: Reaper loading the
-  `.clap` proves the file is valid, so this is host-side. Checklist,
-  cheapest first: (1) also copy the bundle to `~/.local/share/clap`
-  (the XDG data dir is Ardour's preferred CLAP path; nothing creates
-  it); (2) Window → Plugin Manager → *Discover New/Updated*, then
-  **restart Ardour** — newly discovered plugins can stay unusable
-  until restart; (3) check Edit → Preferences → Plugins for a
-  per-format CLAP switch and read any *Error* row in Plugin Manager —
-  a concrete error string is the most valuable finding; (4) check your
-  Ardour provenance: ardour.org prebuilt = full support; distro
-  package / Flathub = maybe compiled without CLAP or sandboxed away
-  from `~/.clap`. (Fedora note: Ardour may want the plugin `.so`
-  executable on a transferred filesystem — see §8.1 of
-  [`build.md`](build.md).)
+- **Ardour does not see the CLAP while Reaper does** — Reaper loading
+  the `.clap` proves the file is valid, so this is host-side. Work the
+  checklist, cheapest step first:
+  - Copy the bundle also to `~/.local/share/clap` — the XDG data dir
+    is Ardour's preferred CLAP path, and nothing creates it for you.
+  - **Window → Plugin Manager → *Discover New/Updated***, then
+    **restart Ardour** — newly discovered plugins can stay unusable
+    until the restart.
+  - **Edit → Preferences → Plugins**: check for a per-format CLAP
+    switch, and read any *Error* row in Plugin Manager — a concrete
+    error string is the most valuable finding.
+  - Check your Ardour **provenance**: ardour.org prebuilt = full
+    support; distro package / Flathub = maybe compiled without CLAP or
+    sandboxed away from `~/.clap`.
+  - Fedora note: Ardour may want the plugin `.so` **executable** if
+    the bundle crossed a filesystem that drops permission bits — see
+    [`install.md`](install.md).
