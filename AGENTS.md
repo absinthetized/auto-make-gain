@@ -106,3 +106,13 @@ Binding for any AI/agent working in this repository:
    control taxonomy, column grid / hero-central pattern, protected
    hero, honest affordances, text discipline). Deviating from it is a
    design decision — the owner judges it first.
+12. **Docs split — ledgers vs snapshots (owner, 2026-11-07):** `doc/ai/`
+   is *ledger* material — append-only records of decisions, plans,
+   progress and rationale (history lives there, and in git +
+   `CHANGELOG.md`). `doc/human/` is *snapshot-only* — always a current-
+   state picture, organized by reader depth (README → use → install →
+   build → contribute → code tour); it never carries dated rulings,
+   progress ticks or "what changed" narration. Redundancy rule: every
+   fact lives in exactly ONE doc — higher levels link down, ledgers
+   reference human docs by path; human-doc restructures must keep
+   ledger references resolvable (stable section numbers or a map).

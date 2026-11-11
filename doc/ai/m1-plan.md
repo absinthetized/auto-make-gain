@@ -453,3 +453,40 @@ was the WIP state, not a regression), pen refresh, owner push/merge.
 3. Ramp round 2: default already landed (50 ms); deeper convergence
    work (the Short window stays 3 s — Fast covers it via FR-23)
    waits for release strategy.
+
+## PR-F plan (2026-11-07, branch `pr-f-doc-sprint`): docs sprint
+
+Owner ruling: the human docs need restructuring, not just updating —
+codified as **AGENTS.md rule 12** (docs split: `doc/ai/` = append-only
+ledgers; `doc/human/` = current-state snapshots organized by reader
+depth; every fact lives in exactly one doc, higher levels link down,
+restructures keep ledger references resolvable).
+
+Depth ladder landed (7 commits, all docs-only):
+
+- `26b0fa3` AGENTS.md rule 12 (owner-gated addition, approved)
+- `144c7fc` README re-scoped: funnel top, snapshot-only
+- `68afb56` `usage.md` — NEW level 1: routing the dry tap (Reaper TAP /
+  plain fallback / stale-tap caveat / mono aux), panel controls +
+  color grammar, automation, host quirks (absorbs build.md §6.10)
+- `5562347` `install.md` — NEW level 2: unsigned-bundle install
+  (generalizes §8.1's pen lane; absorbs build.md §5 quarantine +
+  exec-bit steps)
+- `45b7e03` `build.md` snapshot pass — ledger residue out, **section
+  numbers unchanged** (ledger references to §2/§6/§7/§8/§8.1/§8.2
+  stay resolvable); compile meat intact
+- `c4de06e` `contributing.md` — NEW level 4: assumptions,
+  architecture, rhythm, what the maintainer gates (not an AGENTS.md
+  rehash). Owner follow-up: moved to the repo root as
+  `CONTRIBUTING.md` (README/AGENTS/LICEN SE neighborhood — GitHub's
+  conventional spot); inbound pointers in README + build.md §6
+  updated with it.
+- `8fa7353` `code-tour.md` freshness pass — file map + entry chain
+  current through PR-D/PR-E (the rule-7 merge-time currency owed)
+
+Ledger-convention notes: no further PR records in human docs; PR-F
+itself is recorded only here. Old→new map for any older references:
+build.md §4 (host smoke ✅-rows) → build.md §4 (procedure) +
+usage.md (host quirks); §5 (Gatekeeper) → install.md; §6.10 (Ardour
+CLAP checklist) → usage.md quirks; §8.1 mechanics → install.md (lane
+context stays in build.md §8.1).
