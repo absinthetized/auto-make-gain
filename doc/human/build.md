@@ -191,7 +191,7 @@ upstream Fedora only in forked **kernel** (`kernel-16k`), **mesa**
 compile/test lane exercises. Everything the lane touches (gcc, cmake,
 ninja, freetype/fontconfig/X11/GL/ALSA *headers*) is plain Fedora
 packaging. Version-skew guard: the image is pinned to the Remix's
-release (`fedora:44`, not `:latest`), and once per machine provisioning
+release (`fedora:45`, not `:latest`), and once per machine provisioning
 one compares `gcc --version` inside the container vs. on the Asahi box.
 
 **Committed lane:**
@@ -209,7 +209,7 @@ load and behave inside a real DAW* — that stays Tier 2, by design.
 ### 8.1 Artifact transfer lane (container → pen → bare metal)
 
 Container-built plugin artifacts run directly on the Fedora Asahi box,
-because the Remix's *userland* is upstream Fedora 44 — the same release
+because the Remix's *userland* is upstream Fedora 45 — the same release
 the container is pinned to (§8). So instead of re-provisioning +
 rebuilding during a rare Tier-2 session, carry the binaries over. The
 generic install steps (folders, `.so` exec bits, host scanning) are

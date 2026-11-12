@@ -40,3 +40,24 @@ pinned toolchain matches the machines it serves again.
   (`cmp`) against the freshly built VST3.
 - No source-file changes needed — the rebase is pure verification +
   this record; docs truth (build.md "macOS 27" rows) already accurate.
+
+## M2b evidence (fedora:45 pin, 2026-11-11)
+
+- Pin bump: `FROM fedora:44` → `fedora:45` (Dockerfile) + build.md §8
+  + code-tour truth rows; branch `pr-m2b-fedora45` stacked on m2a.
+- dnf-list sanity vs 45: proven by construction — the image build
+  runs `scripts/bootstrap.sh` verbatim, and the arm64 lane provisioned
+  and built green on the fresh 45 image (a renamed package would fail
+  provisioning loudly).
+- arm64 lane: ALL GREEN on the fresh 45 image (cold cache: full image
+  build + dependency fetch, ~30 min).
+- gcc parity expectation (owner fact + distro records): Asahi 45
+  carries no gcc override — userland = upstream Fedora 45; fedora:45
+  ships gcc 16.2.1 (`.fc45.1`), glibc 2.44 (released 2026-11-03). The
+  one-command `gcc --version` check on the bare-metal box is recorded
+  as a Tier-2 follow-up smoke, not a release blocker (failure mode is
+  loud: `GLIBC_x not found` at load).
+- amd64 Rosetta lane: ALL GREEN on its own 45 image (cold cache; two
+  transient mirror curl hiccups during provisioning, dnf retried and
+  completed — noted for honesty, not a lane defect).
+
