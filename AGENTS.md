@@ -116,3 +116,13 @@ Binding for any AI/agent working in this repository:
    fact lives in exactly ONE doc — higher levels link down, ledgers
    reference human docs by path; human-doc restructures must keep
    ledger references resolvable (stable section numbers or a map).
+   **Snapshot hygiene scan (owner, 2026-11-12; hard procedure gate):**
+   before every commit touching human docs (`doc/human/`, README,
+   CONTRIBUTING.md, CHANGELOG.md), the assistant mechanically scans
+   the diff for history markers — "since", "as of", "historical",
+   "previously", "no longer", milestone/PR references, ✅/⏳ ticks,
+   narrative dates — and either removes them (state *now*) or justifies
+   each surviving hit in the commit message. Current-fact provenance
+   is exempt (e.g. a pin's "main HEAD <date>" is a fact, not
+   narration); the scan targets storytelling about change. The scan
+   automates as a doc-lint in the CI/CD milestone (queued M4).
