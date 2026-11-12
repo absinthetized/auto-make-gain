@@ -50,7 +50,7 @@ Artifact locations (Release default):
 (`COPY_PLUGIN_AFTER_BUILD` is ON in-tree — the build steps copy into
 your user's plug-in folders automatically on macOS.)
 
-First configure downloads the pinned dependencies (JUCE 8.0.15,
+First configure downloads the pinned dependencies (JUCE 9.0.5,
 clap-juce-extensions, Catch2 v3.16.1 — pins live in
 `cmake/deps-pins.cmake`).
 
@@ -92,27 +92,14 @@ Build-environment issues belong here; **code-level gotchas** live in
 1. **"first configure takes forever"** — JUCE is a large shallow clone +
    juceaide build; >15 min on slow links is documented expectation. On
    re-configure it is a no-op.
-2. **Metal deprecation warnings on macOS 27** — `MTLResourceStorageModeManaged is deprecated` from the
-   SDK matrix vs JUCE 8.0.15. Harmless and cosmetic; zip them when filing build issues.
-3. **clap-juce-extensions: the link target is `clap_juce_extensions`** — no
+2. **clap-juce-extensions: the link target is `clap_juce_extensions`** — no
    `clap-juce-extensions::clap-juce-extensions` ALIAS exists; linking the
    alias name as documented in older forums fails at configure. Also: do
    **not** add `CLAP` to juce_add_plugin FORMATS — the extension lays the
    format over the base target itself.
-4. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
+3. **`dnf install` says nothing to do** on a partially-provisioned Asahi —
    bootstrap is idempotent; re-run to verify.
-5. **"jmessage: ft2build.h / X11/Xlib.h not found while building juceaide"**:
-   JUCE's configure-time helper `juceaide` is itself built as a headless
-   JUCE app, so even plugin-only targets need the **FreeType + X11 dev
-   headers** Linux launch expects — pkg-config probes for
-   freetype2/fontconfig/gl/curl/webkit/gtk are normal *warnings* and
-   non-fatal once the flags in CMakeLists disable the correlative
-   modules (`JUCE_WEB_BROWSER=0`, `JUCE_USE_CURL=0`, `JUCE_JACK=0`,
-   `JUCE_PLUGINHOST_LADSPA=0`). Canonical reference:
-   <https://github.com/juce-framework/JUCE/blob/develop/docs/Linux%20Dependencies.md> —
-   consult it for every new platform-dependent surprise before
-   improvising package lists.
-6. **Host discovery problems after a working build** — e.g. "Ardour
+4. **Host discovery problems after a working build** — e.g. "Ardour
    does not see the CLAP while Reaper does" — are documented in the
    host-quirks section at the end of [`usage.md`](usage.md).
 
@@ -120,8 +107,8 @@ Build-environment issues belong here; **code-level gotchas** live in
 
 | Pin | Value | Why this pin |
 |---|---|---|
-| JUCE | `8.0.15` | latest 8.0.x; JUCE 9 deliberately deferred to its own milestone (decision record) |
-| clap-juce-extensions | commit `7adee3a` | newest main HEAD compatible with JUCE 8 |
+| JUCE | `9.0.5` | latest 9.0.x; native CLAP is not in JUCE 9 yet — the extension below stays the CLAP path |
+| clap-juce-extensions | commit `6bde108` | main HEAD 2026-11-06 |
 | Catch2 | `v3.16.1` | latest release at pin time |
 
 Pins are reviewed manually; commits to `cmake/deps-pins.cmake` are

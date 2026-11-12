@@ -61,3 +61,22 @@ pinned toolchain matches the machines it serves again.
   transient mirror curl hiccups during provisioning, dnf retried and
   completed — noted for honesty, not a lane defect).
 
+## M2c evidence (JUCE 9 bump, 2026-11-12)
+
+- Pins: JUCE 8.0.15 → **9.0.5** (tag verified HTTP 200); clap-juce-
+  extensions `7adee3a` → **`6bde108`** (live main HEAD 2026-11-06;
+  carries JUCE 9 support #178 + embedded-editor scale fix #183).
+  Catch2 unchanged. **lunasvg is vendored inside JUCE**
+  (`juce_graphics/drawables/lunasvg/`) — the plan's anticipated new
+  pin row is not needed.
+- Native mac (clang 21): fresh configure **76 s** (juceaide slimmed in
+  JUCE 9), build exit 0 with **zero warnings** — the JUCE 8 Metal
+  deprecation family is gone in 9.0.5 (build.md §6.2 updated);
+  ctest 100%.
+- Docker lanes: arm64 native **ALL GREEN**, amd64 Rosetta **ALL
+  GREEN** (images layer-cached at 45; the runs exercised the fresh
+  JUCE 9.0.5 + extension `6bde108` fetch and build in-container).
+- Owner smoke gate: Reaper reload with attention to FR-27 zoom (the
+  extension's #183 touches editor scale math) + meter rendering;
+  Asahi Ardour/CLAP on the next Tier-2 session.
+
