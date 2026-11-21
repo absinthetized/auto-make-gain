@@ -39,8 +39,9 @@
 - M2 merge: `pr-m2c-juce9` (JUCE 9.0.5 + extension `6bde108`, both lanes
   green) is pushed but unmerged as of 2026-11-21; `main` remains
   v0.2.0/JUCE 8 until it merges.
-- Tier-2 Asahi session: `gcc --version` skew-guard close-out (M2b
-  follow-up) and Ardour/CLAP load on the JUCE 9 binaries.
+- Tier-2 Asahi session: ~~`gcc --version` skew-guard close-out~~ —
+  **closed 2026-11-21** (16.2.1 both sides, host packaging newer; see
+  m2-plan §M2b); Ardour/CLAP load on the JUCE 9 binaries remains open.
 - Pen payload refresh: `~/Desktop/makegain-linux-arts-55f2909/` holds
   JUCE-9.0.5-verified aarch64 VST3 + CLAP + JSFX TAP scripts, copied
   from the M2c lane artifacts.

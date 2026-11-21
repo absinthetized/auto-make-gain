@@ -57,6 +57,12 @@ pinned toolchain matches the machines it serves again.
   one-command `gcc --version` check on the bare-metal box is recorded
   as a Tier-2 follow-up smoke, not a release blocker (failure mode is
   loud: `GLIBC_x not found` at load).
+- **gcc guard CLOSED (2026-11-21, owner measured on the box):**
+  `gcc (GCC) 16.2.1 20261029 (Red Hat 16.2.1-3)`. Same upstream
+  release as the container base (16.2.1); packaging build one revision
+  *newer* than the upstream `-2.fc45.1` — the safe direction (host ≥
+  container ⇒ container-built `.so` loads). glibc 2.44 both sides.
+  Transferred artifacts are valid; no re-pin needed.
 - amd64 Rosetta lane: ALL GREEN on its own 45 image (cold cache; two
   transient mirror curl hiccups during provisioning, dnf retried and
   completed — noted for honesty, not a lane defect).
