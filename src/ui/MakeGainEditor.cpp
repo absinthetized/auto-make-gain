@@ -11,6 +11,13 @@
 
 #include <algorithm>
 
+// Build stamp fallback: the CMake target defines this (configure-time git
+// sha capture, see the top of CMakeLists.txt). The fallback keeps the
+// editor compilable if it is ever built outside that target.
+#ifndef MAKEGAIN_BUILD_SHA
+ #define MAKEGAIN_BUILD_SHA "unknown"
+#endif
+
 // ---------------------------------------------------------------------------
 // Editor shell: owns the zoom machinery + the 10 Hz readout poll.
 // ---------------------------------------------------------------------------
@@ -237,6 +244,18 @@ void MakeGainEditor::MainPanel::paint (juce::Graphics& g)
     g.setFont (juce::FontOptions (18.0f, juce::Font::bold));
     g.drawText ("MakeGain", getLocalBounds().removeFromTop (44),
                 juce::Justification::centred);
+
+    // Build stamp (provenance, not decoration): version from CMake's
+    // project(VERSION) via JucePlugin_VersionString, plus the short git
+    // sha captured at configure. It answers "which build is this?" on the
+    // host with no shell - the Tier-2 pen-test discipline depends on it
+    // (doc/ai/backlog.md). Dim and small: informational, not a control.
+    const juce::String buildStamp = "v" + juce::String (JucePlugin_VersionString)
+                                    + " / " + juce::String (MAKEGAIN_BUILD_SHA);
+    g.setFont (juce::FontOptions (10.0f));
+    g.setColour (juce::Colour (0xff8a9099));
+    g.drawText (buildStamp, getLocalBounds().removeFromTop (44).reduced (8, 0),
+                juce::Justification::centredRight);
 
     // Readout band: caption + big number for applied gain, then delta.
     auto readouts = getLocalBounds().removeFromTop (170).removeFromBottom (126);

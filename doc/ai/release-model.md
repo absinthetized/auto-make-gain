@@ -42,6 +42,10 @@
 - Patch tags (`v0.x.z`) for bugfix strands between milestones.
 - Tags are created by the owner post-merge (annotated), after checkpoint
   rows in the milestone plan go green.
+- **Pre-tag gate:** `scripts/check-version.sh` must print OK before the
+  tag is created (CMake `project(VERSION)` = CHANGELOG top section; the
+  same check runs as tier-1 step `[0/2]`, strict once HEAD is tagged).
+  Bumping `project(VERSION)` is part of the release PR.
 
 ## GitHub Releases
 

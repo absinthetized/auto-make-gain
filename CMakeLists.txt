@@ -1,9 +1,41 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(MakeGain
-  VERSION 0.1.0
+  VERSION 0.2.1
   DESCRIPTION "MakeGain — chain-wide automatic make-gain plugin (AGPLv3)"
   LANGUAGES C CXX)
+
+# --- build stamp (provenance, not version truth) ---------------------------
+# The short git sha is compiled in so a LOADED binary can be identified:
+# the editor shows "version · sha" in its title row, and tooling can read
+# it back with `strings`. Version truth stays project(VERSION) above
+# (`juce_add_plugin` derives JucePlugin_VersionString + bundle metadata
+# from it). Outside a git checkout (release tarball) the stamp degrades
+# to "unknown" — the build must never depend on git being present.
+set(MAKEGAIN_BUILD_SHA "unknown")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+  execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE _makegain_git_sha
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(_makegain_git_sha)
+    set(MAKEGAIN_BUILD_SHA "${_makegain_git_sha}")
+    # "+dirty" only for tracked-file modifications — ignored build output
+    # and untracked scratch must not make a test build look different.
+    execute_process(
+      COMMAND git status --porcelain --untracked-files=no
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      OUTPUT_VARIABLE _makegain_git_dirty
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET)
+    if(_makegain_git_dirty)
+      string(APPEND MAKEGAIN_BUILD_SHA "+dirty")
+    endif()
+  endif()
+endif()
+message(STATUS "MakeGain build stamp: ${PROJECT_VERSION} · ${MAKEGAIN_BUILD_SHA}")
 
 # C++20 build mode restricted to C++17-compatible features (TS §1.1).
 set(CMAKE_CXX_STANDARD 20)
@@ -87,6 +119,12 @@ target_compile_definitions(MakeGain PUBLIC
   # fresh Fedora bootstrap to core packages only.
   JUCE_JACK=0
   JUCE_PLUGINHOST_LADSPA=0)
+
+# Build stamp for the editor/status tools (see the capture block at the
+# top of this file). The escaped quotes make the C++ side see a string
+# literal: -DMAKEGAIN_BUILD_SHA="<sha>".
+target_compile_definitions(MakeGain PRIVATE
+  "MAKEGAIN_BUILD_SHA=\"${MAKEGAIN_BUILD_SHA}\"")
 
 target_link_libraries(MakeGain PRIVATE
   juce::juce_audio_utils

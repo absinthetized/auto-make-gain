@@ -63,6 +63,12 @@ clap-juce-extensions, Catch2 v3.16.1 — pins live in
 Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
 plugin artifacts are always sanitizer-free.
 
+The **version gate** (`scripts/check-version.sh`) compares the version in
+`CMakeLists.txt` (the single source of truth), the top `CHANGELOG.md`
+section, and the git tag on HEAD when there is one. It runs as the first
+step of the Docker lanes (§8); at a tagged HEAD any mismatch fails the
+gate, on an untagged HEAD mismatches are warnings.
+
 ## 4. Quick host verification
 
 The pipeline's unit for "it works in a host" is the ear + the panel:
@@ -217,6 +223,13 @@ exactly [`install.md`](install.md). Lane-specific discipline:
 4. **Scope:** owner-to-owner transfer between his own machines only.
    The repo's distribution promise stays FR-18's *clone and build* —
    binaries never leave the owner's ecosystem as project deliverables.
+
+Staging is scripted, never hand-copied:
+`scripts/stage-linux-artifacts.sh` copies the lane output into a
+sha-named folder, refusing artifacts whose embedded build stamp does not
+match HEAD, and writes `MANIFEST.txt` + `SHA256SUMS` so the payload can
+be verified on the target. The plugin's title row shows
+`version / sha`; that stamp is the final check before a Tier-2 session.
 
 ### 8.2 Cross-arch lane: amd64 under Rosetta (`--x64`)
 
