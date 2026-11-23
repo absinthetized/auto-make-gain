@@ -63,6 +63,12 @@ clap-juce-extensions, Catch2 v3.16.1 — pins live in
 Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
 plugin artifacts are always sanitizer-free.
 
+The **version gate** (`scripts/check-version.sh`) compares the version in
+`CMakeLists.txt` (the single source of truth), the top `CHANGELOG.md`
+section, and the git tag on HEAD when there is one. It runs as the first
+step of the Docker lanes (§8); at a tagged HEAD any mismatch fails the
+gate, on an untagged HEAD mismatches are warnings.
+
 ## 4. Quick host verification
 
 The pipeline's unit for "it works in a host" is the ear + the panel:
