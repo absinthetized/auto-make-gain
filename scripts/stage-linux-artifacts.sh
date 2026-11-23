@@ -87,7 +87,11 @@ done
 
 # --- payload ----------------------------------------------------------------
 version=$(grep -m1 -oE 'VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $2}')
-juce=$(strings "$vst3_so" | grep -m1 -oE 'JUCE v[0-9]+\.[0-9]+\.[0-9]+' || echo "JUCE unknown")
+# Same pipeline rule as the stamp check above: no -m1/-q on the strings
+# side (early exit => SIGPIPE => pipefail swallows/duplicates the value);
+# awk reads the whole stream and prints the first JUCE version it saw.
+juce_out=$(strings "$vst3_so" | grep -oE 'JUCE v[0-9]+\.[0-9]+\.[0-9]+' | awk 'NR==1{print}')
+juce=${juce_out:-JUCE unknown}
 
 dest="$OUT_DIR/makegain-linux-arts-$sha"
 rm -rf "$dest"
