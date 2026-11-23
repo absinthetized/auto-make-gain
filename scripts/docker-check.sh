@@ -20,7 +20,11 @@
 # The --x64 image has its own tag and layer cache; its FIRST provisioning
 # compiles the whole toolchain workload under emulation (~30-90 min).
 #
-# What it validates inside the fedora-dev image:
+# What it validates:
+#   0. version gate - scripts/check-version.sh, ON THE HOST before any
+#      container work (CMake version vs CHANGELOG vs HEAD tag; fail-fast,
+#      tagged HEAD is strict)
+# Inside the fedora-dev image:
 #   1. configure  - cmake --preset <preset> (first run fetches pinned JUCE)
 #   2. build      - all plugin formats (VST3 + CLAP)
 #   3. ctest      - Catch2 DSP unit tests
@@ -58,6 +62,14 @@ case "${1:-}" in
 esac
 
 cd "$ROOT"
+
+# [0/2] Version gate (rule: tier 1 = this script; the gate runs on the
+# HOST, before any container work). Rationale: the version is a source-
+# tree fact, not an arch fact — checking it inside the container would
+# need git ownership workarounds and would waste the whole build on a
+# mismatch. A failing release-state check aborts the lane here.
+echo "==> [0/2] version gate (scripts/check-version.sh)"
+bash scripts/check-version.sh
 
 BUILD_FLAGS=""
 RUN_FLAGS=""
