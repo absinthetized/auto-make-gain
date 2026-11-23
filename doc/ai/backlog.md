@@ -4,35 +4,26 @@
 > started*. Items leave when they land (record → plan file of their
 > milestone, e.g. `m2-plan.md`) or when the owner drops them.
 
+## Landed
+
+- **Version surfaced in the plugin GUI** (was #1) — landed 2026-11-23 on
+  `pr-version-in-gui`: CMake `project(VERSION)` = 0.2.1 as the single
+  version truth, configure-time git-sha build stamp compiled in, GUI
+  title-row stamp (`v0.2.1 / <sha>`), `scripts/check-version.sh` wired
+  as tier-1 step `[0/2]`, `scripts/stage-linux-artifacts.sh` for stamped
+  pen payloads, AGENTS rule 13 (Tier-2 artifact provenance).
+
 ## Queued items (in order)
 
-1. **Version surfaced in the plugin GUI** — ruling 2026-11-21. Origin:
-   `strings` check showed the binaries self-report **0.1.0** while the
-   tag was v0.2.0 — `CMakeLists.txt` `project(VERSION 0.1.0)` is stale
-   and `juce_add_plugin` has no VERSION override, so
-   `JucePlugin_VersionString` never tracked the tag. Fix = CMake is the
-   single version source; the GUI shows it.
-   - Branch `pr-version-in-gui` off `main` (independent of M2 — no file
-     overlap).
-   - Commit decomposition (owner-approved):
-     1. `build: project VERSION -> 0.2.1` (build script → eyeball gate)
-     2. `ui: plugin version in the title row` — `JucePlugin_VersionString`
-        drawn dim, top-right of the title row (source → eyeball gate).
-   - **Version number: v0.2.1** (owner ruling).
-   - **Placement: title-row right corner** (owner ruling; "status bar is
-     already busy").
-   - Note for the tag ceremony: bumping `project(VERSION ...)` becomes
-     part of the owner's cut ritual from here on.
-
-2. **M3 — faster / more real-time compensation** — owner, 2026-11-21.
+1. **M3 — faster / more real-time compensation** — owner, 2026-11-21.
    Explicitly *not* started; **waits for the owner's elaboration brief**
    (scope lives in DSP/UI territory: latency, windowing, ramp behavior).
    No agent-side design until that brief exists.
 
-3. **M4 — CI/CD + release process** — queued last (owner 2026-11-11):
+2. **M4 — CI/CD + release process** — queued last (owner 2026-11-11):
    GitHub Actions matrix, packaging (signed macOS artifacts),
    dependency-audit tooling (syft/grype), and the rule-12 snapshot
-   doc-lint automation.
+   doc-lint automation (plus running the version gate on tag pushes).
 
 ## Open loose ends (not new work)
 

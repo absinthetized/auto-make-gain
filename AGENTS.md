@@ -126,3 +126,10 @@ Binding for any AI/agent working in this repository:
    is exempt (e.g. a pin's "main HEAD <date>" is a fact, not
    narration); the scan targets storytelling about change. The scan
    automates as a doc-lint in the CI/CD milestone (queued M4).
+13. **Tier-2 artifact provenance (owner, 2026-11-23):** artifacts for
+   bare-metal (Asahi) testing come only from a green lane at the current
+   HEAD and are staged only via `scripts/stage-linux-artifacts.sh`
+   (stamped, sha-named, MANIFEST + SHA256SUMS). Before testing, the GUI
+   build stamp (`version / sha`) must match the PR head. Hand-copied or
+   unstamped artifacts are never tested — origin: an unverified copy
+   shipped the previous generation of binaries to a Tier-2 session.

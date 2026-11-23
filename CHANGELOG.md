@@ -6,6 +6,26 @@ and freezes the section at the tag commit. Entries carry only facts
 (what appears, changes, disappears for the *user*) — rationale and
 process live in the ledgers (`doc/ai/`), not here.
 
+## v0.2.1
+
+### Added
+
+- Version and build commit shown in the panel's title row (`v0.2.1 / <sha>`),
+  so the build under test is identifiable from the GUI.
+- Build stamp (version + short git sha) compiled into the binaries and
+  readable with `strings`.
+- Version gate: `scripts/check-version.sh` verifies CMake version,
+  CHANGELOG section and HEAD tag agree; it runs as the first step of the
+  Linux lanes.
+- `scripts/stage-linux-artifacts.sh`: stamped, sha-named Linux payloads
+  for bare-metal testing, with `MANIFEST.txt` and `SHA256SUMS`.
+
+### Changed
+
+- JUCE 9.0.5 (from 8.0.15); CLAP layer at clap-juce-extensions `6bde108`.
+- Linux lane image pinned to `fedora:45` (Fedora Asahi 45 userland).
+- Plugin version metadata reports `0.2.1` in the VST3, CLAP and AU bundles.
+
 ## v0.2.0
 
 ### Added

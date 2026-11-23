@@ -224,6 +224,13 @@ exactly [`install.md`](install.md). Lane-specific discipline:
    The repo's distribution promise stays FR-18's *clone and build* —
    binaries never leave the owner's ecosystem as project deliverables.
 
+Staging is scripted, never hand-copied:
+`scripts/stage-linux-artifacts.sh` copies the lane output into a
+sha-named folder, refusing artifacts whose embedded build stamp does not
+match HEAD, and writes `MANIFEST.txt` + `SHA256SUMS` so the payload can
+be verified on the target. The plugin's title row shows
+`version / sha`; that stamp is the final check before a Tier-2 session.
+
 ### 8.2 Cross-arch lane: amd64 under Rosetta (`--x64`)
 
 The `linux-x64` / `linux-x64-sanitize` CMake presets exist, but no
