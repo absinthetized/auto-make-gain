@@ -46,7 +46,7 @@ the *same* compiled processor — that's the whole multi-format payoff.
 | `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. |
 | `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 9): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
-| `docker/fedora-dev.Dockerfile` | The pinned fedora:44 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |
+| `docker/fedora-dev.Dockerfile` | The pinned fedora:45 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |
 | `cmake/deps-pins.cmake` | The pinned third-party versions (JUCE, clap-juce-extensions, Catch2). |
 
 ## How the build folds together (CMakeLists.txt orientation)

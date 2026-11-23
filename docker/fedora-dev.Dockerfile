@@ -6,10 +6,10 @@
 # build runs the repo's own bootstrap script, so a future dependency change
 # automatically ships to both the bare-metal lane and this container lane.
 #
-# Pinned to fedora:44 (the release the Asahi Remix tracks) rather than
+# Pinned to fedora:45 (the release the Asahi Remix tracks) rather than
 # :latest — see build.md §8 "version-skew guard": the container must not
 # drift away from the bare-metal box mid-milestone.
-FROM fedora:44
+FROM fedora:45
 
 # bootstrap.sh prefixes its package install with `sudo`. The base image
 # already runs as root but carries no sudo binary; installing it lets the
