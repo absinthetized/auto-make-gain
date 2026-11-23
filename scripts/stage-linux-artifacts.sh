@@ -73,8 +73,12 @@ done
 # The stamp literal is compiled in as a standalone string (CMake builds
 # -DMAKEGAIN_BUILD_SHA="<sha>"); an exact-line match proves THIS .so was
 # configured from THIS commit.
+# NOTE: grep runs WITHOUT -q on purpose. Under `set -o pipefail` the early
+# exit of -q closes the pipe, strings dies of SIGPIPE and the pipeline
+# reports 141 even when the stamp matched - the guard would refuse every
+# good artifact. Full read + /dev/null keeps the pipeline status honest.
 for f in "$vst3_so" "$clap_so"; do
-    if ! strings "$f" | grep -Fxq "$sha"; then
+    if ! strings "$f" | grep -Fx "$sha" > /dev/null; then
         echo "stage: REFUSED - $f does not embed stamp '$sha'."
         echo "       The lane ran on other source. Re-run the lane at HEAD."
         exit 1
