@@ -46,9 +46,10 @@ Binding for any AI/agent working in this repository:
      these metrics presume the commit size/atomicity above unchanged (they
      are the base unit; the PR sizing builds on top of it).
 5. **Session resume:** first read `README.md`, then
-   `doc/human/MakeGain_FR-v1.md` (frozen contract), then
+   `doc/human/MakeGain_FR.md` (the contract), then
    `doc/ai/MakeGain_TS-v0.1.md` + its decision log (§9) and session
-   backlog (§10). FRs are frozen: changes go through the owner, not silently.
+   backlog (§10). FRs change only by an owner ruling, never silently;
+   the contract is rewritten in place (rule 12).
 6. **Release & branching model (owner, 2026-10-17):** from the commit that
    introduces `doc/ai/release-model.md` onward, agents never work on `main`
    directly — a unit of work lands on a branch, the owner pushes the
@@ -116,6 +117,12 @@ Binding for any AI/agent working in this repository:
    fact lives in exactly ONE doc — higher levels link down, ledgers
    reference human docs by path; human-doc restructures must keep
    ledger references resolvable (stable section numbers or a map).
+   **The FR contract is a human doc too (owner, 2026-11-24):** it states
+   the requirements as they stand — no dated amendment sections, no
+   fate/supersession tables, no "retires/replaced/no longer" narration.
+   A contract change rewrites the affected requirement in place; the
+   ruling that caused it is recorded in `doc/ai/decisions.md` and in the
+   milestone plan, and git carries the old text.
    **Snapshot hygiene scan (owner, 2026-11-12; hard procedure gate):**
    before every commit touching human docs (`doc/human/`, README,
    CONTRIBUTING.md, CHANGELOG.md), the assistant mechanically scans
