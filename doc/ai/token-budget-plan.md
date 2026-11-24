@@ -105,7 +105,7 @@ turns) and rises again once context growth and compaction dominate:
   expensive precisely because of *when* it missed).
 
 **"≤50 turns" is a provisional ceiling, not the target.** The optimum is
-measured, not guessed: `scripts/token-report.sh` reports per-session turns
+measured, not guessed: `~/.config/opencode/scripts/token-report.sh` reports per-session turns
 against prompt tokens per turn; the minimum of that curve is the owner's
 number. Do not adopt a number from this document.
 
@@ -161,7 +161,8 @@ made.
 ## Verification
 
 A read-only report over `~/.local/share/opencode/opencode.db`
-(`scripts/token-report.sh`, proposed): per day and per session — prompt
+(`~/.config/opencode/scripts/token-report.sh` — a machine-local tool, kept
+outside this repo): per day and per session — prompt
 tokens, uncached vs cache-read split, output, turns, mean/max context, top
 tool-output consumers. Run before/after a working day; compare uncached
 input and turns, not the headline figure.
