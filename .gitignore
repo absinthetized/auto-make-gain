@@ -14,9 +14,6 @@ vendor/
 compile_commands.json
 CMakeUserPresets.json
 
-# --- ephemeral session state (token-optimisation working file) ---
-doc/ai/session-brief.md
-
 # --- OS / editor noise -------------------------------------------------
 .DS_Store
 *.swp
