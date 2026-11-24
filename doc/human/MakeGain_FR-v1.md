@@ -356,3 +356,60 @@ scales identically, and no per-widget coordinates are recomputed.
 The zoom level persists with the session as a non-automatable UI-only
 parameter (FR-22 class). The design contract lives in the visual
 grammar doc (column grid / hero protections apply after transform).
+
+### 10.11 Amendment A5 — two compensation modes (2026-11-24, owner rulings)
+
+> The independent Metric and Response switches collapse into one Mode
+> switch. Owner rationale: a 400 ms reading and a 3 s reading are both
+> *loudness*; the distinction a user actually makes is fast-and-
+> approximate versus slow-and-representative. Three modes are worse than
+> two, so the 400 ms combination retires.
+
+| Item | Fate under A5 |
+|---|---|
+| FR-23 (meter response) | **Superseded** — becomes the Mode parameter (FR-28). |
+| FR-6, FR-8 (metric options / free switching) | **Amended** — the metric follows the mode; it is no longer independently switchable. Both detectors still always run, so switching never re-captures. |
+| FR-26 (metering HP) | **Amended** — unchanged as a control; the Fast path gains a band floor (FR-29). |
+| FR-12 / §10.6 readouts | **Amended** — the delta readout carries the mode's unit and name; the panel states the active detector's band and span. |
+| FR-11 (no added latency), FR-24 (freeze), FR-25 (ramp) | **Kept** unchanged. |
+
+**FR-28 Mode.** One two-position non-automatable parameter (FR-22 class)
+replaces the retired Metric and Response parameters:
+
+- **Fast** — broadband level: exponential mean-square, τ = 15 ms, per
+  sample, evaluated on a 5 ms internal grid. A *level* reading, not a
+  loudness reading; converges on a chain edit in tens of milliseconds.
+  Default.
+- **Smooth** — BS.1770 short-term loudness, 3 s window, 100 ms grid —
+  the A2/A3 geometry unchanged. The psychoacoustically representative
+  reading, and correspondingly slower.
+
+Both detectors run continuously in both modes, so a switch needs no
+re-capture and no fill wait. Switching is allowed at any time while not
+frozen; the ramp carries the target change (FR-24/FR-25 unchanged, no
+slam).
+
+**FR-29 Fast detector band floor.** A ~15 ms span cannot resolve below
+~67 Hz. The Fast path therefore applies a 4th-order high-pass at an
+effective corner of `max(Meter HP corner, 80 Hz)`, with 80 Hz applied
+even when the Meter HP is off. The floor is part of the detector
+definition, not a user setting. This is separate from the *product*
+reason for the Meter HP (multiband low-end processing pumping the
+delta, FR-26), which stays user-controlled and identical in both modes.
+Smooth has no floor.
+
+**FR-30 Mode and Freeze.** The Mode switch is locked while Freeze is
+engaged, on the same rationale as the Meter HP lock: a metering-
+definition change during a hold moves the readouts under the hold and
+leaves a different detector state at release.
+
+**Readouts (amends FR-12 / §10.6).** The chain-delta readout carries
+the mode's unit and name (`dB` for Fast, `LU` for Smooth). The panel
+states the active detector's band and span in the column the retired
+Metric switch leaves free (`level 80 Hz+ / 15 ms` / `loudness 3 s`).
+
+**Session compatibility.** The Mode parameter replaces `metric` and
+`response`. On loading a state that carries the retired parameters:
+`metric = LUFS → Smooth`, `metric = dB RMS → Fast`; `response` is
+ignored. This preserves what an existing session was hearing. Fresh
+instances default to Fast.
