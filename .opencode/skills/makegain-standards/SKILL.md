@@ -14,7 +14,7 @@ should be patched in the next related PR.
 
 ## Session start
 
-1. Read `README.md`, `doc/human/MakeGain_FR-v1.md` (frozen FR
+1. Read `README.md`, `doc/human/MakeGain_FR.md` (the FR
    contract), then `doc/ai/MakeGain_TS-v0.1.md` including its decision
    log (§9) and backlog (§10).
 2. `git fetch` / pull and diff against `origin` before doing anything else.
@@ -26,8 +26,8 @@ should be patched in the next related PR.
 - Never `git commit` without an explicit owner order.
 - Never work directly on `main`: units of work go on a branch
   (`mN[-descriptor]`, `fix-*`) and land via owner's PR.
-- Requirements (FRs) are frozen contract; changes go through the owner,
-  never silently.
+- Requirements (FRs) are the contract: changes go through the owner,
+  never silently, and the FR is rewritten in place (no amendment stack).
 - Never operate system components directly (AGENTS.md §8): Linux build/test
   containers are run **only through committed repo scripts**
   (`scripts/docker-check.sh` style) — agents generate code, they do not call

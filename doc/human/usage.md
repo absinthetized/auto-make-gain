@@ -113,7 +113,7 @@ Color grammar of the status band:
 ## Automation
 
 Only **Active** is host-automatable; everything else is deliberately
-UI-only ("the user is the judge" — see the frozen FR, §4.2/§10). The
+UI-only ("the user is the judge" — see the FR contract, §10.6). The
 panel marks the automatable control (amber ring). Zoom and switches are
 persisted in the session but not automatable.
 

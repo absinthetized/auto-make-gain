@@ -1,15 +1,16 @@
 # Contributing to MakeGain
 
 How the repository works if you want to propose changes — in one page.
-For the *plugin's design* go to the frozen FR
-([`MakeGain_FR-v1.md`](doc/human/MakeGain_FR-v1.md)); for a line-by-line
+For the *plugin's design* go to the contract
+([`MakeGain_FR.md`](doc/human/MakeGain_FR.md)); for a line-by-line
 code walk, [`code-tour.md`](doc/human/code-tour.md).
 
 ## Assumptions the codebase stands on
 
-1. **Frozen requirements.** `doc/human/MakeGain_FR-v1.md` is the
-   behavioral contract; behavioral changes are amendments by ruling, not
-   drive-by edits.
+1. **The contract is the contract.** `doc/human/MakeGain_FR.md` states
+   the behavioral requirements as they stand; a behavioral change is an
+   owner ruling that rewrites the affected requirement, never a
+   drive-by edit.
 2. **The DSP is framework-free.** All loudness/GGM logic lives in
    `src/dsp/`, plain C++ without JUCE types, unit-tested with Catch2 in
    its own targets. JUCE is the adapter layer (`src/plugin/`,
