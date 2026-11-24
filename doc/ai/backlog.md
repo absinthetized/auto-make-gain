@@ -12,6 +12,9 @@
   title-row stamp (`v0.2.1 / <sha>`), `scripts/check-version.sh` wired
   as tier-1 step `[0/2]`, `scripts/stage-linux-artifacts.sh` for stamped
   pen payloads, AGENTS rule 13 (Tier-2 artifact provenance).
+- **M2 — toolchain maintenance (Fedora 45 + JUCE 9.0.5)** — merged as
+  `Pr m2c juce9 (#14)`; both Docker lanes green. Owner gate closed
+  2026-11-23 (below). Evidence: m2-plan §M2b/§M2c.
 
 ## Queued items (in order)
 
@@ -27,12 +30,10 @@
 
 ## Open loose ends (not new work)
 
-- M2 merge: `pr-m2c-juce9` (JUCE 9.0.5 + extension `6bde108`, both lanes
-  green) is pushed but unmerged as of 2026-11-21; `main` remains
-  v0.2.0/JUCE 8 until it merges.
 - Tier-2 Asahi session: ~~`gcc --version` skew-guard close-out~~ —
   **closed 2026-11-21** (16.2.1 both sides, host packaging newer; see
-  m2-plan §M2b); Ardour/CLAP load on the JUCE 9 binaries remains open.
+  m2-plan §M2b); ~~Ardour/CLAP load on the JUCE 9 binaries~~ —
+  **closed 2026-11-23, fully green** (m2-plan §M2c). Nothing left on M2.
 - Pen payload refresh: `~/Desktop/makegain-linux-arts-55f2909/` holds
   JUCE-9.0.5-verified aarch64 VST3 + CLAP + JSFX TAP scripts, copied
   from the M2c lane artifacts.
