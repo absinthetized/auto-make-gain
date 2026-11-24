@@ -151,8 +151,10 @@ add_executable(makegain_tests
   tests/dsp/k_weighting_test.cpp
   tests/dsp/loudness_meter_test.cpp
   tests/dsp/gain_computer_test.cpp
+  tests/dsp/fast_level_test.cpp
   src/dsp/k_weighting.cpp
   src/dsp/loudness_meter.cpp
+  src/dsp/fast_level.cpp
   src/dsp/gain_computer.cpp)
 
 # dsp/ is JUCE-free and its headers are included by name from the tests

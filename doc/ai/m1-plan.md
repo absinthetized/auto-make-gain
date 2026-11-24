@@ -3,7 +3,7 @@
 > **Audience: AI/owner process material** — live milestone strategy +
 > checkpoint/evidence ledgers. Humans: start at the README's docs map.
 
-Status: proposed 2026-10-18. Frozen FR contract: `doc/human/MakeGain_FR-v1.md`.
+Status: proposed 2026-10-18. Contract: `doc/human/MakeGain_FR.md`.
 Architectural rules: `doc/ai/MakeGain_TS-v0.1.md` §7 (`src/dsp/` JUCE-free; plain
 float path first; no hand-written SIMD; latency-neutral plugin).
 
@@ -207,7 +207,7 @@ abstraction for a profiling-evidence decision, not a policy one).
 
 ## Re-scope after Amendment A2 (2026-10-22, operative)
 
-The A2 contract change (`MakeGain_FR-v1.md` §10) retires the training
+The A2 contract change (`MakeGain_FR.md` §10) retires the training
 FSM mid-PR-B2 and converts the product to the internal-sidechain delta
 engine. Of PR-B2's five landed commits (branch `m1-wire-up`):
 
@@ -221,7 +221,7 @@ engine. Of PR-B2's five landed commits (branch `m1-wire-up`):
 
 | # | Commit | Files | Checkpoint |
 |---|---|---|---|
-| A2 | `docs: FR amendment A2 + decisions + M1 re-scope` | `MakeGain_FR-v1.md`, `decisions.md`, this file | owner eyeball (docs only) |
+| A2 | `docs: FR amendment A2 + decisions + M1 re-scope` | `MakeGain_FR.md`, `decisions.md`, this file | owner eyeball (docs only) |
 | PB2e-r | `tests(red): delta-engine spec R-D1..R-D9 + honest stub` — gain_computer rewritten to a stub; new tests for the delta engine (spec rows below) | `src/dsp/gain_computer.{h,cpp}` (in-place rewrite), `tests/dsp/gain_computer_test.cpp` | owner reviews assertions; red output quoted |
 | PB2e-g | `dsp(green): delta engine — dual-meter AGC, hold, clamp, ramp, emitter` | same (+ TS delta-engine spec note in `MakeGain_TS-v0.1.md` §9) | ALL GREEN quoted |
 | PB2f | `plugin: aux-bus wiring — second stereo input bus, wet/dry mono sums, Active-AGC` | `MakeGainProcessor.{h,cpp}`, `MakeGainEditor.{h,cpp}` (status line + 4 Hz refresh), no CMake change needed | **mac Reaper smoke A2**: TAP first in chain, Apply last; edit-compensation with program-dynamics pass-through; toggle; tap-loss fallback (silence the aux); **mono-track case with TapMono** (mono main = mono aux, pin 2) |

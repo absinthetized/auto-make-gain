@@ -5,7 +5,7 @@
 
 > Version: v0.1 — 2026-10-17; structure fixed 2026-10-20 (stray decision
 > subsections folded into §9/§11; no spec content changed).
-> Source of truth: [../human/MakeGain_FR-v1.md](../human/MakeGain_FR-v1.md) (frozen)
+> Source of truth: [../human/MakeGain_FR.md](../human/MakeGain_FR.md) (the contract)
 > Convention: each section maps to the FR it implements. Items marked
 > **[assumed]** are tech decisions made by the assistant pending owner veto.
 

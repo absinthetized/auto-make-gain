@@ -19,9 +19,11 @@
 ## Queued items (in order)
 
 1. **M3 — faster / more real-time compensation** — owner, 2026-11-21.
-   Explicitly *not* started; **waits for the owner's elaboration brief**
-   (scope lives in DSP/UI territory: latency, windowing, ramp behavior).
-   No agent-side design until that brief exists.
+   **In progress** (started 2026-11-24 on `pr-m3a-fast-level`): scope,
+   rulings, contract delta and the commit breakdown live in
+   `m3-plan.md`. Two modes (Fast level / Smooth LUFS), a fixed 80 Hz
+   floor in the Fast detector, and the Mode switch replacing the Metric
+   and Response switches.
 
 2. **M4 — CI/CD + release process** — queued last (owner 2026-11-11):
    GitHub Actions matrix, packaging (signed macOS artifacts),
