@@ -85,4 +85,8 @@ pinned toolchain matches the machines it serves again.
 - Owner smoke gate: Reaper reload with attention to FR-27 zoom (the
   extension's #183 touches editor scale math) + meter rendering;
   Asahi Ardour/CLAP on the next Tier-2 session.
+- **M2 gate CLOSED (2026-11-23, owner):** Tier-2 Asahi session fully
+  green — Ardour loads and runs the JUCE 9.0.5 VST3 + CLAP builds; no
+  host-side defect surfaced. M2c merge landed as `Pr m2c juce9 (#14)`;
+  the milestone carries no open items.
 

@@ -133,3 +133,15 @@ Binding for any AI/agent working in this repository:
    build stamp (`version / sha`) must match the PR head. Hand-copied or
    unstamped artifacts are never tested — origin: an unverified copy
    shipped the previous generation of binaries to a Tier-2 session.
+14. **Check economy (owner, 2026-11-24):** gates protect *decisions*; no
+   gate requires re-confirming a fact already established in the
+   session, or re-checking state nothing has touched since it was
+   checked. One approval covers the plan and the batch it names; the
+   per-commit diff gate on source files stands, reviewed per commit
+   unless the owner asks for a bundle. Self-verification covers
+   *mechanical* checks only (build, tests, lint, file state) — design and
+   judgment calls stay with the owner. Never restate a diff, plan or
+   log already shown — quote failing lines, not whole build logs.
+   Session unit is one task, ended at a commit boundary. Conflict rule:
+   if an efficiency default ever conflicts with a gate above, the gate
+   wins — say so in one line and continue.
