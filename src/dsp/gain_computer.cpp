@@ -1,10 +1,11 @@
 // src/dsp/gain_computer.cpp — the A2 delta engine (PB2e GREEN).
 //
-// Per-sample structure of process(): stream `count` samples in ≤ one
-// internal 100 ms evaluation-slot steps (assignment-host chunk sizes can
-// never change the trajectory — R-D8), feeding BOTH meters, ramping both
-// taps' samples toward the current target, and at every slot boundary
-// re-evaluating the chain delta and the wall-side silence verdicts.
+// Per-sample structure of process(): stream `count` samples in chunks
+// bounded by the active mode's evaluation slot (Fast 5 ms / Smooth
+// 100 ms), feeding BOTH detectors, ramping toward the current target,
+// and at every slot boundary re-evaluating the chain delta and the
+// wall-side silence verdicts. Assignment-host chunk sizes can never
+// change the trajectory on either grid (chunk-invariance tests).
 //
 // Target policy (evaluate(), on the audio thread, slot boundaries only):
 //   bypassed            → target 0 dB (ramp home — FR §10.3)
@@ -23,13 +24,6 @@
 
 namespace makegain::dsp {
 
-// Evaluation slot in seconds — the internal fixed schedule the R-D8
-// chunk-invariance property needs (file-local on purpose: ONE schedule
-// in the codebase; mirrors the meter's 100 ms sub-block convention).
-namespace {
-constexpr double kEvalSlotSec = 0.1;
-}  // namespace
-
 GainComputer::GainComputer(double sample_rate)
     : wet_meter_(sample_rate, kMeterWindowSec),
       dry_meter_(sample_rate, kMeterWindowSec),
@@ -37,20 +31,44 @@ GainComputer::GainComputer(double sample_rate)
       fast_dry_(sample_rate),
       sample_rate_(sample_rate) {
   set_ramp_tc(kDefaultRampTcSec);
-  eval_slot_samples_ =
-      static_cast<std::uint64_t>(sample_rate_ * kEvalSlotSec + 0.5);
-  // Metering-HP scratch: one eval-slot-sized pair, allocated ONCE here
+  rebuild_grid();
+  // Scratch: one 100 ms chunk (the larger grid), allocated ONCE here
   // (construction is non-audio time; process() stays allocation-free).
-  const auto scratch_n = static_cast<std::size_t>(eval_slot_samples_);
+  const auto scratch_n = static_cast<std::size_t>(
+      sample_rate_ * kSmoothEvalSlotSec + 0.5);
   hp_scratch_wet_.resize(scratch_n);
   hp_scratch_dry_.resize(scratch_n);
+  fast_scratch_wet_.resize(scratch_n);
+  fast_scratch_dry_.resize(scratch_n);
+  // Both HP chains start coherent: Smooth at the user corner (unused
+  // while disabled), Fast at the 80 Hz floor (FR-29).
+  const double fast_hz = meter_hp_enabled_
+                             ? std::max(meter_hp_hz_, kFastHpFloorHz)
+                             : kFastHpFloorHz;
+  recompute_hp_coefficients(hp_smooth_wet_, hp_smooth_dry_, meter_hp_hz_);
+  recompute_hp_coefficients(hp_fast_wet_, hp_fast_dry_, fast_hz);
+}
+
+void GainComputer::rebuild_grid() {
+  const double slot = (mode_ == GainMode::fast) ? kFastEvalSlotSec
+                                                : kSmoothEvalSlotSec;
+  eval_slot_samples_ = std::max<std::uint64_t>(
+      1, static_cast<std::uint64_t>(sample_rate_ * slot + 0.5));
+  // A mid-slot mode change drops any partial slot: the two grids have
+  // different lengths, so carrying energy across them is meaningless.
+  slot_fed_ = 0;
+  wet_slot_sq_ = 0.0;
+  dry_slot_sq_ = 0.0;
 }
 
 void GainComputer::set_mode(GainMode mode) {
-  // STUB (RED): stores the choice only. Fast is still evaluated as
-  // Smooth (LUFS on the 100 ms grid) — an obvious placeholder the
-  // RED cases below expose.
+  // FR-30: a detector change under a hold would move the readouts, so
+  // the switch is refused while frozen. Nothing else is disturbed — both
+  // detectors stay warm.
+  if (frozen_) return;
+  if (mode_ == mode) return;
   mode_ = mode;
+  rebuild_grid();
 }
 
 GainMode GainComputer::mode() const { return mode_; }
@@ -86,18 +104,26 @@ void GainComputer::process(const float* wet, const float* dry,
     const std::uint64_t room = eval_slot_samples_ - slot_fed_;
     const std::size_t take = static_cast<std::size_t>(
         std::min<std::uint64_t>(room, count - i));
-    // Meter feeds: the HP (FR-26) lives ONLY in this path — audio out
-    // is untouched forever. Disabled = the exact A2 feed (R-F8).
+    // Smooth path (FR-26 user HP): the filter lives ONLY in this path —
+    // audio out is never touched. Disabled = the exact A2 feed (R-F8).
     const float* wet_m = wet + i;
     const float* dry_m = dry + i;
     if (meter_hp_enabled_) {
-      hp_process(hp_wet_stage_, wet_m, hp_scratch_wet_.data(), take);
-      hp_process(hp_dry_stage_, dry_m, hp_scratch_dry_.data(), take);
+      hp_process(hp_smooth_wet_, wet_m, hp_scratch_wet_.data(), take);
+      hp_process(hp_smooth_dry_, dry_m, hp_scratch_dry_.data(), take);
       wet_m = hp_scratch_wet_.data();
       dry_m = hp_scratch_dry_.data();
     }
     wet_meter_.process(wet_m, take);
     dry_meter_.process(dry_m, take);
+
+    // Fast path (FR-29): ALWAYS filtered at the 80 Hz floor or above,
+    // and fed in BOTH modes so a switch re-targets from warm state.
+    hp_process(hp_fast_wet_, wet + i, fast_scratch_wet_.data(), take);
+    hp_process(hp_fast_dry_, dry + i, fast_scratch_dry_.data(), take);
+    fast_wet_.process(fast_scratch_wet_.data(), take);
+    fast_dry_.process(fast_scratch_dry_.data(), take);
+
     advance_ramp(take, out_gain_db ? out_gain_db + i : nullptr);
     // Wall-side energy of the newest slot, per tap (digital-silence
     // verdict is per TAP — the hold gate is the stricter of the two).
@@ -105,45 +131,66 @@ void GainComputer::process(const float* wet, const float* dry,
     dry_slot_sq_ += slot_energy(dry + i, take);
     i += take;
     slot_fed_ += take;
+    total_fed_ += take;
     if (slot_fed_ == eval_slot_samples_) {
       slot_fed_ = 0;
+      const double slot_sec =
+          static_cast<double>(eval_slot_samples_) / sample_rate_;
       const double wet_ms = wet_slot_sq_ /
                             static_cast<double>(eval_slot_samples_);
       const double dry_ms = dry_slot_sq_ /
                             static_cast<double>(eval_slot_samples_);
       wet_slot_sq_ = 0.0;
       dry_slot_sq_ = 0.0;
-      // Streaks: 1 slot silent = 100 ms of digital silence at the wall.
-      wet_silent_streak_ =
-          (wet_ms <= kSilenceMeanSq) ? wet_silent_streak_ + 1 : 0;
-      dry_silent_streak_ =
-          (dry_ms <= kSilenceMeanSq) ? dry_silent_streak_ + 1 : 0;
-      flags_.no_signal_wet = (wet_silent_streak_ >= kNoSignalSlots);
-      flags_.dry_tap_missing = (dry_silent_streak_ >= kNoSignalSlots);
+      // Streaks accumulate in SECONDS: 5 s means the same on either grid.
+      wet_silent_sec_ = (wet_ms <= kSilenceMeanSq)
+                            ? wet_silent_sec_ + slot_sec : 0.0;
+      dry_silent_sec_ = (dry_ms <= kSilenceMeanSq)
+                            ? dry_silent_sec_ + slot_sec : 0.0;
+      flags_.no_signal_wet = (wet_silent_sec_ >= kNoSignalSec);
+      flags_.dry_tap_missing = (dry_silent_sec_ >= kNoSignalSec);
       evaluate();
     }
   }
 }
 
 void GainComputer::evaluate() {
-  const auto wet_snap = wet_meter_.snapshot();
-  const auto dry_snap = dry_meter_.snapshot();
-  const bool fresh = wet_snap.valid && dry_snap.valid;
+  // Active-mode readings. Both detectors run, but only the selected
+  // pair drives the delta and the readouts (FR-28's unit rule: a level
+  // in Fast, LUFS in Smooth).
+  double wet_db = 0.0;
+  double dry_db = 0.0;
+  bool wet_ok = false;
+  bool dry_ok = false;
+  if (mode_ == GainMode::fast) {
+    wet_db = fast_wet_.level_db();
+    dry_db = fast_dry_.level_db();
+    // Warm-up floor: the follower's level is only trusted after a few
+    // time constants, so the target does not chase the startup swell.
+    wet_ok = dry_ok = delta_valid();
+  } else {
+    const auto wet_snap = wet_meter_.snapshot();
+    const auto dry_snap = dry_meter_.snapshot();
+    wet_db = wet_snap.lufs;
+    dry_db = dry_snap.lufs;
+    wet_ok = wet_snap.valid;
+    dry_ok = dry_snap.valid;
+  }
   // Hold gate (FR §10.4): EITHER tap's newest slot below the silence
-  // floor makes the delta meaningless (a silent meter reading is not a
-  // loudness). streak == 0 ⇔ the newest slot carried signal.
+  // floor makes the delta meaningless (a silent reading is not a
+  // loudness). silent_sec == 0 ⇔ the newest slot carried signal.
   const bool either_silent =
-      (wet_silent_streak_ != 0) || (dry_silent_streak_ != 0);
-  const bool delta_ok = fresh && !either_silent;
+      (wet_silent_sec_ != 0.0) || (dry_silent_sec_ != 0.0);
+  const bool delta_ok = wet_ok && dry_ok && !either_silent;
 
-  // Per-tap readouts (FR §10.6): valid snapshots only. STUB (RED):
-  // Fast is not wired yet, so both modes read the Smooth detector.
-  if (wet_snap.valid) last_wet_db_ = wet_snap.lufs;
-  if (dry_snap.valid) last_dry_db_ = dry_snap.lufs;
+  // Per-tap readouts (FR §10.6): the ACTIVE mode's reading; a
+  // wet-only-valid Smooth state still shows the wet reading.
+  if (wet_ok) last_wet_db_ = wet_db;
+  if (dry_ok) last_dry_db_ = dry_db;
 
   // The delta readout tracks valid, non-silent comparisons regardless of
   // engagement — the UI shows the chain delta even while bypassed (§10.6).
-  if (delta_ok) last_delta_db_ = wet_snap.lufs - dry_snap.lufs;
+  if (delta_ok) last_delta_db_ = wet_db - dry_db;
 
   // Policy order matters (PB2e first-run lesson): the FREEZE decision
   // dominates everything — a frozen plugin is a static volume (FR-24),
@@ -200,8 +247,14 @@ double GainComputer::applied_gain_db() const { return applied_db_; }
 double GainComputer::delta_db() const { return last_delta_db_; }
 
 bool GainComputer::delta_valid() const {
-  // Freshness floor for the delta: full windows on BOTH taps. The wall
-  // silence gate adds the hold on top of this.
+  // Freshness floor for the delta. Smooth: full windows on BOTH taps.
+  // Fast: both followers past their warm-up. The wall silence gate adds
+  // the hold on top of this.
+  if (mode_ == GainMode::fast) {
+    const auto warm = std::max<std::uint64_t>(
+        1, static_cast<std::uint64_t>(sample_rate_ * kFastWarmupSec + 0.5));
+    return total_fed_ >= warm;
+  }
   return wet_meter_.snapshot().valid && dry_meter_.snapshot().valid;
 }
 
@@ -234,12 +287,21 @@ void GainComputer::set_meter_hp(bool enabled, double hz)
   if (meter_hp_enabled_ == enabled && meter_hp_hz_ == clamped_hz) return;
   meter_hp_enabled_ = enabled;
   meter_hp_hz_ = clamped_hz;
-  recompute_hp_coefficients(clamped_hz);
-  hp_wet_stage_.clear();
-  hp_dry_stage_.clear();
+  // Smooth: the user's corner, used only while enabled.
+  recompute_hp_coefficients(hp_smooth_wet_, hp_smooth_dry_, meter_hp_hz_);
+  hp_smooth_wet_.clear();
+  hp_smooth_dry_.clear();
+  // Fast: the 80 Hz floor applies whether or not the user enabled HP.
+  const double fast_hz = meter_hp_enabled_
+                             ? std::max(meter_hp_hz_, kFastHpFloorHz)
+                             : kFastHpFloorHz;
+  recompute_hp_coefficients(hp_fast_wet_, hp_fast_dry_, fast_hz);
+  hp_fast_wet_.clear();
+  hp_fast_dry_.clear();
 }
 
-void GainComputer::recompute_hp_coefficients(double hz)
+void GainComputer::recompute_hp_coefficients(HpStage& wet, HpStage& dry,
+                                             double hz)
 {
   // 4th-order Butterworth high-pass = two cascaded 2nd-order sections
   // (Q = 0.541..., Q = 1.306...) sharing the corner. RBJ cookbook form
@@ -247,7 +309,7 @@ void GainComputer::recompute_hp_coefficients(double hz)
   const double w0 = 2.0 * std::numbers::pi * hz / sample_rate_;
   const double cos_w0 = std::cos(w0);
   const double sin_w0 = std::sin(w0);
-  for (HpBiquad* q : {&hp_wet_stage_.q1, &hp_dry_stage_.q1}) {
+  for (HpBiquad* q : {&wet.q1, &dry.q1}) {
     const double alpha = sin_w0 / (2.0 * hp_stage_Q1_);
     const double a0 = 1.0 + alpha;
     q->b0 = (1.0 + cos_w0) / 2.0 / a0;
@@ -256,7 +318,7 @@ void GainComputer::recompute_hp_coefficients(double hz)
     q->a1 = -2.0 * cos_w0 / a0;
     q->a2 = (1.0 - alpha) / a0;
   }
-  for (HpBiquad* q : {&hp_wet_stage_.q2, &hp_dry_stage_.q2}) {
+  for (HpBiquad* q : {&wet.q2, &dry.q2}) {
     const double alpha = sin_w0 / (2.0 * hp_stage_Q2_);
     const double a0 = 1.0 + alpha;
     q->b0 = (1.0 + cos_w0) / 2.0 / a0;

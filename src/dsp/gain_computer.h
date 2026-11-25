@@ -111,7 +111,8 @@ class GainComputer {
   // -- audio thread -----------------------------------------------------
   // Feed BOTH mono sums (wet, dry) and advance over `count` samples; any
   // block size (ragged, huge, zero) is safe; the per-sample ramp math is
-  // identical regardless of blocking (pinned by the R-D8 test). When
+  // identical regardless of blocking (pinned by the chunk-invariance
+  // tests on both grids). When
   // out_gain_db is set, it receives the applied gain in dB AFTER each
   // sample's ramp step — the values the processor multiplies both
   // channels by (10^(dB/20), FR-11). Caller owns `count` slots; writing
@@ -128,8 +129,9 @@ class GainComputer {
   // The last evaluated chain delta (wet − dry, current metric, BEFORE
   // the sign flip that feeds the target) — a UI readout (FR §10.6).
   double delta_db() const;
-  // True once BOTH meters hold a full window (freshness floor for the
-  // delta; until then the target holds).
+  // Freshness floor for the delta; until then the target holds. Smooth:
+  // both meters hold a full window. Fast: both detectors are past their
+  // warm-up. Mode-dependent by design (FR-28).
   bool delta_valid() const;
 
   // Code constants (FR-2's "not a UI setting" spirit, A2 form: window /
@@ -142,21 +144,29 @@ class GainComputer {
   static constexpr double kDefaultRampTcSec = 0.05;  // 50 ms ramp (FR-5)
   // A2 §10.4: MaxComp default lowered 24 → 16 dB (range 0–48 unchanged).
   static constexpr double kDefaultMaxCompDb = 16.0;
-  // Wall-slot silence threshold (newest 100 ms mean square ≤ this ⇒
+  // Wall-slot silence threshold (newest slot's mean square ≤ this ⇒
   // digitally silent input, ≈ −120 dB FS). Same definition as the M1
   // meter-era gate: drives the hold AND both flags' streaks.
   static constexpr double kSilenceMeanSq = 1e-12;
-  // 5.0 s of 100 ms slots (TS §9 ③) before a silence flag lights.
-  static constexpr std::size_t kNoSignalSlots = 50;
+  // 5.0 s of sustained silence before a flag lights (TS §9 ③). Time-
+  // based, not slot-count-based: the two modes run different grids.
+  static constexpr double kNoSignalSec = 5.0;
+  // Evaluation grids (FR-28): Fast re-aims every 5 ms, Smooth keeps the
+  // BS.1770 100 ms convention. Also the Fast detector band floor (FR-29).
+  static constexpr double kFastEvalSlotSec = 0.005;
+  static constexpr double kSmoothEvalSlotSec = 0.1;
+  static constexpr double kFastHpFloorHz = 80.0;
+  // Fast detector warm-up: 5 time constants before its level is trusted.
+  static constexpr double kFastWarmupSec = 5.0 * 0.015;
 
  private:
   LoudnessMeter wet_meter_;  // main input (chain-processed)
   LoudnessMeter dry_meter_;  // aux tap (pre-chain); same engine ⇒ equal
                              // inputs give a usefully EXACT zero delta
 
-  // A5 (M3b) Fast detectors, one per tap. STUB (RED): declared and
-  // constructed, but nothing feeds them yet — Fast is evaluated as
-  // Smooth until the GREEN commit wires them.
+  // A5 (M3b) Fast detectors, one per tap. Both run in BOTH modes, so a
+  // mode switch re-targets from warm state (FR-28, "both detectors
+  // always run").
   FastLevel fast_wet_;
   FastLevel fast_dry_;
 
@@ -187,22 +197,32 @@ class GainComputer {
     void clear() { x1 = x2 = y1 = y2 = 0.0; }
   };
   struct HpStage { HpBiquad q1, q2; void clear() { q1.clear(); q2.clear(); } };
-  HpStage hp_wet_stage_, hp_dry_stage_;
+  // Two independent filter chains per tap: Smooth applies the user HP
+  // only when enabled (today's stage, untouched); Fast ALWAYS filters at
+  // max(user, 80) — the FR-29 band floor — because its broadband level
+  // would otherwise chase rumble the loudness meter ignores.
+  HpStage hp_smooth_wet_, hp_smooth_dry_;
+  HpStage hp_fast_wet_, hp_fast_dry_;
   double hp_stage_Q1_ = 0.5411961001461970;  // Butterworth 4th: 1/(2·cos15°)
   double hp_stage_Q2_ = 1.3065629648763766;  // Butterworth 4th: 1/(2·sin15°)
 
-  // Meter feeds, HP-filtered when enabled: scratch buffers sized once at
-  // construction (max = one eval-slot chunk), reused per block.
+  // Meter feeds, HP-filtered: scratch buffers sized once at construction
+  // (max = the larger 100 ms eval slot), reused per block.
   std::vector<float> hp_scratch_wet_, hp_scratch_dry_;
+  std::vector<float> fast_scratch_wet_, fast_scratch_dry_;
 
   // Per-tap loudness readouts (FR §10.6), captured on each slot
   // evaluation in the CURRENT metric; sentinel 0.0 until first valid.
   double last_wet_db_ = 0.0;
   double last_dry_db_ = 0.0;
 
-  // (Re)computes the HP stage coefficients for `hz`; called only when
-  // the caller's cache guard sees a real change. Allocation-free.
-  void recompute_hp_coefficients(double hz);
+  // (Re)computes one stage pair for `hz`; called only when set_meter_hp
+  // sees a real change. Both taps of the pair share coefficients.
+  // Allocation-free.
+  void recompute_hp_coefficients(HpStage& wet, HpStage& dry, double hz);
+  // Rebuilds eval_slot_samples_ for the active mode and drops any
+  // partial slot (mode change mid-slot: no stale energy carried over).
+  void rebuild_grid();
   // Filters `count` samples through one tap's 4th-order HP into `out`
   // (mutates the stage's state, obviously; no allocation).
   void hp_process(HpStage& stage, const float* in, float* out,
@@ -218,17 +238,19 @@ class GainComputer {
   double target_db_ = 0.0;   // what the ramp currently chases
   double last_delta_db_ = 0.0;  // last evaluated wet − dry (UI readout)
 
-  // Evaluation-slot schedule (internal fixed 100 ms schedule; the R-D8
-  // invariance needs AN internal schedule, and one only).
+  // Evaluation-slot schedule: mode-derived (Fast 5 ms, Smooth 100 ms).
+  // The R-D8 invariance needs AN internal schedule per mode, and one only.
   double alpha_ = 0.0;
-  std::uint64_t eval_slot_samples_ = 0;
+  std::uint64_t eval_slot_samples_ = 1;
   std::uint64_t slot_fed_ = 0;
+  std::uint64_t total_fed_ = 0;   // Fast warm-up (detector trust floor)
 
-  // Wall-side silence detection per tap (hold gate + flag streaks).
+  // Wall-side silence detection per tap (hold gate + flag streaks). The
+  // streak is accumulated in SECONDS so both grids meet the same 5 s.
   double wet_slot_sq_ = 0.0;
   double dry_slot_sq_ = 0.0;
-  std::size_t wet_silent_streak_ = 0;
-  std::size_t dry_silent_streak_ = 0;
+  double wet_silent_sec_ = 0.0;
+  double dry_silent_sec_ = 0.0;
 
   // Slot-boundary work: delta evaluation + flag bookkeeping.
   void evaluate();
