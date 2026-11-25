@@ -13,8 +13,6 @@
 //   R-D2  program dynamics pass: equal level change in BOTH taps leaves
 //         the applied gain untouched (identical meters ⇒ delta exactly 0)
 //   R-D3  edit compensation: wet-only level change is nulled (±6 dB pair)
-//   R-D4  metric pairing: LUFS vs dB RMS delta re-targets from the still-
-//         running meters at the next slot (meter-as-oracle for values)
 //   R-D5  clamp: |target| > MaxComp (16 dB default, A2) → applied AT the
 //         bound, clamped flag exposed, both signs
 //   R-D6  ramp: engage ramps to target (one-pole, closed-form window
@@ -28,12 +26,33 @@
 //         wet-silence burst, so the hold sits mid-trajectory)
 //   R-D9  no memory beyond meters + parameters: disengage then re-engage
 //         repeats the same compensation; nothing persists in secret
+//   R-F1  freeze locks the applied gain; the state is exposed
+//   R-F2  unfreeze is continuous: no jump, ramp resumes from held value
+//   R-F5..F8 metering HP: −3 dB at cutoff, 24 dB/oct slope, null
+//         invariant under the filter, off = the A2 engine unchanged
+//
+//   R-G1  Fast converges a chain edit inside 200 ms (Smooth does not)
+//   R-G2  floor rule: Fast corner = max(HP, 80) with 80 when off;
+//         Smooth has no floor
+//   R-G3  mode switch mid-run: both detectors warm, target re-aims at
+//         the next evaluation, ramp carries it (no gap, no slam)
+//   R-G4  silence hold + flag are time-based (5 s) on both grids
+//   R-G5  chunk invariance on the 5 ms grid; first response ≤ 10 ms
+//   R-G6  identical taps stay an exact 0 dB delta in BOTH modes
+//   R-G7  mode change refused while frozen (FR-30), accepted after
+//   R-G8  legacy shim: Fast default, set_metric maps, response no-op
+//
+// The A2/A3 cases pin the SMOOTH detector explicitly (smooth_engine):
+// Smooth keeps today's stage exactly (FR-28). R-D4 retired into R-G3
+// (metric pairing became the mode switch); R-F3/R-F4 (the Response
+// window) retired into R-G1/R-G3.
 //
 // Method: both taps are fed chunk-wise by ONE helper (each tap gets the
 // same chunk size; R-D8 proves the per-sample property). Golden numbers
 // use the 1 kHz-sine anchor: 0 dBFS ⇒ −3.0 LUFS, linear in level ⇒
-// X dBFS ⇒ LUFS X−3.00. R-D4 uses a LoudnessMeter as the oracle so the
-// test carries no hand-rolled K-weighting math.
+// X dBFS ⇒ LUFS X−3.00 (and ⇒ X−3.01 dB in Fast's level reading, close
+// enough that the anchor carries). R-G3 uses a LoudnessMeter as the
+// oracle so the test carries no hand-rolled K-weighting math.
 
 #include "gain_computer.h"
 #include "loudness_meter.h"
@@ -106,6 +125,16 @@ void feed(dsp::GainComputer& g, const std::vector<float>& wet,
 
 }  // namespace
 
+// Legacy A2/A3 cases below pin the SMOOTH detector — the 3 s LUFS
+// window and 100 ms grid they were written against (FR-28 keeps
+// Smooth's stage exactly as it was). Fast is the default now and has
+// its own cases R-G1..R-G8 at the end of the file.
+dsp::GainComputer smooth_engine(double rate = kRate) {
+  dsp::GainComputer g(rate);
+  g.set_mode(dsp::GainMode::smooth);
+  return g;
+}
+
 // ---------------------------------------------------------------------------
 // R-D1 — null invariant: equal taps, no action.
 // ---------------------------------------------------------------------------
@@ -115,7 +144,7 @@ TEST_CASE("gain computer: equal taps give zero delta — no chase (R-D1)") {
   std::vector<float> wet = sine_1k(0.0, n);  // identical streams
   std::vector<float> dry = wet;
 
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_engaged(true);
   std::vector<float> out;
   feed(g, wet, dry, out, {7u, 11u, 13u, 1u, 479u});
@@ -156,7 +185,7 @@ TEST_CASE("gain computer: program dynamics pass through (R-D2)") {
   const auto tail = sine_1k(-6.0, n2);
   wet.insert(wet.end(), tail.begin(), tail.end());
 
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_engaged(true);
   std::vector<float> out;
   feed(g, wet, dry, out, {13u, 1u, 479u});
@@ -184,7 +213,7 @@ TEST_CASE("gain computer: chain edits are compensated (R-D3)") {
   SECTION("wet 6 dB quieter than dry → +6 dB compensation") {
     const auto dry = sine_1k(0.0, n);   // −3.0 LUFS
     const auto wet = sine_1k(-6.0, n);  // −9.0 LUFS ⇒ delta −6 ⇒ +6
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
@@ -195,7 +224,7 @@ TEST_CASE("gain computer: chain edits are compensated (R-D3)") {
   SECTION("wet 6 dB louder than dry → −6 dB compensation") {
     const auto dry = sine_1k(-6.0, n);
     const auto wet = sine_1k(0.0, n);
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
@@ -203,46 +232,6 @@ TEST_CASE("gain computer: chain edits are compensated (R-D3)") {
     CHECK(g.applied_gain_db() == Approx(-6.0).margin(0.05));
     CHECK(g.flags().clamped == false);
   }
-}
-
-// ---------------------------------------------------------------------------
-// R-D4 — metric pairing: re-target from the running meters at the next
-// slot; the LoudnessMeter itself is the oracle (no hand K-weighting).
-// ---------------------------------------------------------------------------
-TEST_CASE("gain computer: metric switch re-targets from the same meters (R-D4)") {
-  // Same settle arithmetic as R-D3: 3.0 s window fill + 3.0 s ramp.
-  const std::size_t n = seconds(6.0);
-  // Shelf-separated content: the K high shelf splits LUFS, unweighted
-  // dB RMS stays (nearly) equal — the pairing choice is visibly
-  // different without hand-computing filter math.
-  const auto dry = sine_at(1000.0, 0.0, n);
-  const auto wet = sine_at(6000.0, 0.0, n);
-
-  // Oracle: the same meter engine, same content, same window.
-  dsp::LoudnessMeter m_wet(kRate, 3.0);
-  dsp::LoudnessMeter m_dry(kRate, 3.0);
-  m_wet.process(wet.data(), n);
-  m_dry.process(dry.data(), n);
-  const auto s_wet = m_wet.snapshot();
-  const auto s_dry = m_dry.snapshot();
-  CHECK(s_wet.valid);
-  CHECK(s_dry.valid);
-  const double delta_lufs = s_wet.lufs - s_dry.lufs;
-  const double delta_rms = s_wet.db_rms - s_dry.db_rms;
-  CHECK(delta_rms == Approx(0.0).margin(0.1));  // RMS: equal by design
-  CHECK(delta_lufs > 0.5);                       // shelf region: 6 kHz louder
-
-  dsp::GainComputer g(kRate);
-  g.set_engaged(true);
-  std::vector<float> out;  // metric default = LUFS
-  feed(g, wet, dry, out, {479u, 13u});
-  CHECK(g.applied_gain_db() == Approx(-delta_lufs).margin(0.05));
-
-  // Switch to dB RMS: the next slot re-targets from the SAME running
-  // meters (the second feed runs the full 6 s scenario again; plenty).
-  g.set_metric(dsp::GainMetric::db_rms);
-  feed(g, wet, dry, out, {479u, 13u});
-  CHECK(g.applied_gain_db() == Approx(-delta_rms).margin(0.05));
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +243,7 @@ TEST_CASE("gain computer: clamp at MaxComp with the flag (R-D5)") {
   SECTION("target +24 clamps to +16") {
     const auto dry = sine_1k(0.0, n);    // −3.0 LUFS
     const auto wet = sine_1k(-24.0, n);  // −27.0 ⇒ delta −24 ⇒ target +24
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {479u});
@@ -264,7 +253,7 @@ TEST_CASE("gain computer: clamp at MaxComp with the flag (R-D5)") {
   SECTION("target −24 clamps to −16") {
     const auto dry = sine_1k(-24.0, n);
     const auto wet = sine_1k(0.0, n);
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {479u});
@@ -282,7 +271,7 @@ TEST_CASE("gain computer: ramp properties on engage/disengage (R-D6)") {
   const auto dry = sine_1k(0.0, seconds(9.5));    // −3.0 LUFS
   const auto wet = sine_1k(-6.0, seconds(9.5));   // −9.0 ⇒ target +6
 
-  dsp::GainComputer g(kRate);  // NOT engaged: target stays 0, applied 0
+  dsp::GainComputer g = smooth_engine();  // NOT engaged: target stays 0, applied 0
   // A3 note: the default tc changed to 50 ms (FR-25). This case pins
   // the ONE-POLE SHAPE, not the default: pin tc = 0.3 explicitly so the
   // closed-form bounds keep asserting exactly that shape.
@@ -334,7 +323,7 @@ TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
     std::vector<float> wet = sine_1k(-6.0, settle);
     { const auto gap = digital_silence(seconds(2.2));
       wet.insert(wet.end(), gap.begin(), gap.end()); }
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
@@ -350,7 +339,7 @@ TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
     std::vector<float> wet_long = sine_1k(-6.0, settle);
     { const auto gap = digital_silence(seconds(5.4));
       wet_long.insert(wet_long.end(), gap.begin(), gap.end()); }
-    dsp::GainComputer g2(kRate);
+    dsp::GainComputer g2 = smooth_engine();
     g2.set_engaged(true);
     std::vector<float> out2;
     const auto dry_long = sine_1k(0.0, settle + seconds(5.4));
@@ -374,7 +363,7 @@ TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
     { const auto gap = digital_silence(seconds(5.4));
       dry.insert(dry.end(), gap.begin(), gap.end()); }
 
-    dsp::GainComputer g(kRate);
+    dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
     std::vector<float> out;
     feed(g, wet, dry, out, {7u, 1u, 479u, 13u});
@@ -409,12 +398,12 @@ TEST_CASE("gain computer: chunk invariance of the emitted trajectory (R-D8)") {
   { const auto gap = digital_silence(gap_n); wet.insert(wet.end(), gap.begin(), gap.end()); }
   { const auto back = sine_1k(-6.0, back_n); wet.insert(wet.end(), back.begin(), back.end()); }
 
-  dsp::GainComputer g_ragged(kRate);
+  dsp::GainComputer g_ragged = smooth_engine();
   g_ragged.set_engaged(true);
   std::vector<float> out_ragged;
   feed(g_ragged, wet, dry, out_ragged, {7u, 11u, 13u, 1u, 479u});
 
-  dsp::GainComputer g_uniform(kRate);
+  dsp::GainComputer g_uniform = smooth_engine();
   g_uniform.set_engaged(true);
   std::vector<float> out_uniform;
   feed(g_uniform, wet, dry, out_uniform, {48000u});
@@ -435,7 +424,7 @@ TEST_CASE("gain computer: re-engage repeats the compensation, nothing hidden (R-
   const auto wet = sine_1k(-6.0, n);
   const auto dry = sine_1k(0.0, n);
 
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_engaged(true);
   std::vector<float> out1;
   feed(g, wet, dry, out1, {7u, 1u, 479u, 13u});  // settle phase:
@@ -474,19 +463,6 @@ std::vector<float> noise(std::size_t count, unsigned seed = 7) {
   return v;
 }
 
-// First index (in samples) from which `out` stays within `tol` of
-// `goal` for the remainder — trivial "settle time" measure for R-F4.
-std::size_t settle_index(const std::vector<float>& out, double goal,
-                         double tol) {
-  for (std::size_t i = 0; i < out.size(); ++i) {
-    bool ok = true;
-    for (std::size_t j = i; j < out.size(); ++j)
-      if (std::abs(static_cast<double>(out[j]) - goal) > tol) { ok = false; break; }
-    if (ok) return i;
-  }
-  return out.size();
-}
-
 }  // namespace
 
 // R-F1 — freeze locks the applied gain completely; the state is exposed.
@@ -495,7 +471,7 @@ TEST_CASE("gain computer: freeze locks applied gain (R-F1)") {
   // Both taps live: wet exactly 6 dB louder than dry => settled target −6.
   std::vector<float> dry = sine_1k(0.0, n);
   std::vector<float> wet = sine_1k(6.02, n);
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_engaged(true);
 
   std::vector<float> pre;
@@ -521,7 +497,7 @@ TEST_CASE("gain computer: unfreeze resumes from the held value (R-F2)") {
   const std::size_t n = seconds(6.0);
   std::vector<float> wet = sine_1k(-6.0, n);   // wet quieter → +6 compensation
   std::vector<float> dry = sine_1k(0.0, n);
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_ramp_tc(0.03);
   g.set_engaged(true);
 
@@ -547,74 +523,6 @@ TEST_CASE("gain computer: unfreeze resumes from the held value (R-F2)") {
   CHECK(later > settled + 1.0);                // resumed toward ~+12
 }
 
-// R-F3 — response is a measurement change, not a target change: Short
-// and Fast-windows engines converge to the SAME steady delta.
-TEST_CASE("gain computer: Fast and Short converge to the same delta (R-F3)") {
-  const std::size_t n = seconds(7.0);
-  std::vector<float> wet = sine_1k(-6.0, n);
-  std::vector<float> dry = sine_1k(0.0, n);
-
-  dsp::GainComputer g_short(kRate);
-  g_short.set_engaged(true);
-  std::vector<float> out_s;
-  feed(g_short, wet, dry, out_s, {7u, 1u, 479u, 13u});
-
-  dsp::GainComputer g_fast(kRate);
-  g_fast.set_engaged(true);
-  g_fast.set_meter_window(0.4);
-  std::vector<float> out_f;
-  feed(g_fast, wet, dry, out_f, {7u, 1u, 479u, 13u});
-
-  CHECK(g_fast.delta_valid());
-  CHECK(g_fast.delta_db() == Approx(g_short.delta_db()).margin(0.05));
-  CHECK(g_fast.applied_gain_db() == Approx(6.0).margin(0.05));
-}
-
-// R-F4 — the actual point of Fast: it finishes converging much sooner.
-// Setup: both meters settle on delta-0 content, engaged; at the edit the
-// WET tap alone drops 6 dB (an equal-taps → edited-taps transition), so
-// the target climbs to +6 exactly as fast as the meter window lets it.
-TEST_CASE("gain computer: Fast settles far sooner than Short (R-F4)") {
-  // Pre-edit: 3.5 s of equal taps (delta 0), engines engaged so meters
-  // fill AND the applied gain sits at the settled 0 dB.
-  const std::size_t pre_n = seconds(3.5);
-  const std::size_t post_n = seconds(3.0);
-  std::vector<float> pre_wet = sine_1k(0.0, pre_n);
-  std::vector<float> pre_dry = sine_1k(0.0, pre_n);
-  // Post-edit: wet alone quieter by 6 dB.
-  const std::vector<float> post_wet = sine_1k(-6.0, post_n);
-  const std::vector<float> post_dry = sine_1k(0.0, post_n);
-
-  dsp::GainComputer g_short(kRate);
-  g_short.set_ramp_tc(0.03);
-  g_short.set_engaged(true);
-  {
-    std::vector<float> tmp;
-    feed(g_short, pre_wet, pre_dry, tmp, {479u});
-  }
-  std::vector<float> out_s;
-  feed(g_short, post_wet, post_dry, out_s, {479u});
-
-  dsp::GainComputer g_fast(kRate);
-  g_fast.set_ramp_tc(0.03);
-  g_fast.set_engaged(true);
-  g_fast.set_meter_window(0.4);
-  {
-    std::vector<float> tmp;
-    feed(g_fast, pre_wet, pre_dry, tmp, {479u});
-  }
-  std::vector<float> out_f;
-  feed(g_fast, post_wet, post_dry, out_f, {479u});
-
-  // out_s / out_f start AT the edit; settle time is measured from there.
-  const double fast_settle = static_cast<double>(
-      settle_index(out_f, 6.0, 0.05)) / kRate;
-  const double short_settle = static_cast<double>(
-      settle_index(out_s, 6.0, 0.05)) / kRate;
-  CHECK(fast_settle < 1.0);
-  CHECK(short_settle > 1.8);
-}
-
 // R-F5 — metering HP at its own cutoff: −3 dB insertion (Butterworth
 // flatness point), measured through the engine's per-tap loudness
 // readout (oracle = the engine itself, no hand-rolled weighting).
@@ -624,10 +532,10 @@ TEST_CASE("gain computer: meter HP reads -3 dB at cutoff (R-F5)") {
   const std::vector<float> tone = sine_at(150.0, 0.0, n);
   const std::vector<float> silence(n, 0.0f);
 
-  dsp::GainComputer g_off(kRate);
+  dsp::GainComputer g_off = smooth_engine();
   std::vector<float> out;
   feed(g_off, tone, silence, out, {479u, 13u});
-  dsp::GainComputer g_on(kRate);
+  dsp::GainComputer g_on = smooth_engine();
   g_on.set_meter_hp(true, 150.0);
   std::vector<float> out2;
   feed(g_on, tone, silence, out2, {479u, 13u});
@@ -646,10 +554,10 @@ TEST_CASE("gain computer: meter HP slope is 24 dB/oct (R-F6)") {
   const std::vector<float> tone = sine_at(75.0, 0.0, n);
   const std::vector<float> silence(n, 0.0f);
 
-  dsp::GainComputer g_off(kRate);
+  dsp::GainComputer g_off = smooth_engine();
   std::vector<float> out;
   feed(g_off, tone, silence, out, {479u, 13u});
-  dsp::GainComputer g_on(kRate);
+  dsp::GainComputer g_on = smooth_engine();
   g_on.set_meter_hp(true, 150.0);
   std::vector<float> out2;
   feed(g_on, tone, silence, out2, {479u, 13u});
@@ -666,7 +574,7 @@ TEST_CASE("gain computer: meter HP keeps the null invariant (R-F7)") {
   std::vector<float> wet = noise(n);
   std::vector<float> dry = wet;
 
-  dsp::GainComputer g(kRate);
+  dsp::GainComputer g = smooth_engine();
   g.set_meter_hp(true, 150.0);
   g.set_engaged(true);
   std::vector<float> out;
@@ -684,12 +592,12 @@ TEST_CASE("gain computer: HP off is passthrough to the A2 engine (R-F8)") {
   std::vector<float> wet = sine_1k(-6.0, n);
   std::vector<float> dry = sine_1k(0.0, n);
 
-  dsp::GainComputer g_plain(kRate);
+  dsp::GainComputer g_plain = smooth_engine();
   g_plain.set_engaged(true);
   std::vector<float> out_plain;
   feed(g_plain, wet, dry, out_plain, {7u, 1u, 479u, 13u});
 
-  dsp::GainComputer g_explicit(kRate);
+  dsp::GainComputer g_explicit = smooth_engine();
   g_explicit.set_engaged(true);
   g_explicit.set_meter_hp(false, 150.0);
   std::vector<float> out_exp;
@@ -697,4 +605,298 @@ TEST_CASE("gain computer: HP off is passthrough to the A2 engine (R-F8)") {
 
   for (std::size_t i = 0; i < n; ++i)
     CHECK(out_exp[i] == Approx(out_plain[i]).margin(1e-12));
+}
+
+// ===========================================================================
+// A5 (M3b) — R-G1..R-G8: the two compensation modes (FR-28/29/30).
+// RED phase: the stub stores the mode but still evaluates Smooth, so the
+// Fast-path cases below cannot pass.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// R-G1 — Fast settles a chain edit inside 200 ms; Smooth needs seconds.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: Fast settles a chain edit inside 200 ms (R-G1)") {
+  // Pre-edit 3.2 s of equal taps: fills Smooth's 3 s window and lets
+  // Fast's 15 ms follower settle; both sit at 0 dB.
+  const std::size_t pre_n = seconds(3.2);
+  const std::size_t post_n = seconds(0.6);
+  const std::vector<float> pre_wet = sine_1k(0.0, pre_n);
+  const std::vector<float> pre_dry = sine_1k(0.0, pre_n);
+  const std::vector<float> post_wet = sine_1k(-6.0, post_n);  // wet edit
+  const std::vector<float> post_dry = sine_1k(0.0, post_n);
+
+  auto run = [&](dsp::GainComputer& g) {
+    std::vector<float> tmp;
+    feed(g, pre_wet, pre_dry, tmp, {479u});
+    std::vector<float> out;
+    feed(g, post_wet, post_dry, out, {479u});
+    return out;
+  };
+
+  dsp::GainComputer g_fast(kRate);   // FR-28 default
+  g_fast.set_ramp_tc(0.05);          // pin the 50 ms default this case assumes
+  g_fast.set_engaged(true);
+  const auto out_fast = run(g_fast);
+
+  dsp::GainComputer g_smooth = smooth_engine();
+  g_smooth.set_ramp_tc(0.05);
+  g_smooth.set_engaged(true);
+  const auto out_smooth = run(g_smooth);
+
+  // 200 ms after the edit. Fast: detector done in ~5 tau (75 ms) and the
+  // 50 ms ramp at 1-e^-4 ~ 98 % -> ~ +5.9 dB.
+  const std::size_t at = seconds(0.2) - 1;
+  CHECK(out_fast.at(at) > 5.0);
+  CHECK(out_fast.at(at) < 6.1);
+  // Smooth: the 3 s window still holds ~93 % of the old level, so its
+  // target has barely moved.
+  CHECK(out_smooth.at(at) < 1.0);
+  // Fast is fully there by the end of the 600 ms window.
+  CHECK(out_fast.back() == Approx(6.0).margin(0.05));
+}
+
+// ---------------------------------------------------------------------------
+// R-G2 — Fast floor: corner = max(HP, 80), 80 with the HP off; Smooth
+// has no floor. 40 Hz at 0 dBFS: an 80 Hz 4th-order corner costs the
+// one-octave-below tone ~24 dB (the R-F6 number); 150 Hz costs ~46 dB.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: Fast detector floor is 80 Hz (R-G2)") {
+  const std::size_t n = seconds(3.2);  // > the 3 s Smooth window
+  const std::vector<float> tone = sine_at(40.0, 0.0, n);
+
+  auto fast_reading = [&](bool hp, double hz) {
+    dsp::GainComputer g(kRate);   // default Fast
+    g.set_meter_hp(hp, hz);
+    std::vector<float> out;
+    feed(g, tone, tone, out, {479u, 13u});
+    return g.wet_loudness_db();
+  };
+
+  const double hp_off = fast_reading(false, 150.0);
+  const double hp_40 = fast_reading(true, 40.0);
+  const double hp_150 = fast_reading(true, 150.0);
+
+  // -3 dB mean square at 0 dBFS, minus ~24 dB one octave below 80.
+  CHECK(hp_off == Approx(-27.1).margin(1.5));
+  // The floor dominates a user corner below it: bit-identical stages.
+  CHECK(hp_40 == Approx(hp_off).margin(1e-9));
+  // Above the floor the user's corner IS the corner (~-46 dB at 40 Hz).
+  CHECK(hp_150 == Approx(-48.9).margin(1.5));
+
+  // Smooth keeps today's stage: HP off = no meter filter, and the
+  // K-weighting high-pass sits at 38 Hz, so 40 Hz reads near the anchor.
+  dsp::GainComputer g_smooth = smooth_engine();
+  std::vector<float> out;
+  feed(g_smooth, tone, tone, out, {479u, 13u});
+  CHECK(g_smooth.wet_loudness_db() > -10.0);
+  CHECK(g_smooth.wet_loudness_db() < 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// R-G3 — mode switch mid-run: both detectors are warm, so the target
+// re-aims at the next evaluation and the ramp carries the change.
+// Content: 1 kHz dry vs 6 kHz wet at equal amplitude — the K shelf
+// separates Smooth's LUFS; Fast's broadband level reads them as equal.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: mode switch re-aims from the running detectors (R-G3)") {
+  const std::size_t n = seconds(6.5);
+  const auto dry = sine_at(1000.0, 0.0, n);
+  const auto wet = sine_at(6000.0, 0.0, n);
+
+  // Oracle for the Smooth side (no hand-rolled K-weighting math).
+  dsp::LoudnessMeter m_wet(kRate, 3.0);
+  dsp::LoudnessMeter m_dry(kRate, 3.0);
+  m_wet.process(wet.data(), n);
+  m_dry.process(dry.data(), n);
+  const double delta_lufs = m_wet.snapshot().lufs - m_dry.snapshot().lufs;
+  CHECK(delta_lufs > 0.5);
+
+  dsp::GainComputer g = smooth_engine();
+  g.set_engaged(true);
+  std::vector<float> out;
+  feed(g, wet, dry, out, {479u, 13u});
+  CHECK(g.mode() == dsp::GainMode::smooth);
+  CHECK(g.applied_gain_db() == Approx(-delta_lufs).margin(0.05));
+
+  // Switch: no reset, no gap — the next evaluation re-aims at 0 dB.
+  g.set_mode(dsp::GainMode::fast);
+  CHECK(g.mode() == dsp::GainMode::fast);
+  const double before = g.applied_gain_db();
+  std::vector<float> after;
+  feed(g, wet, dry, after, {479u, 13u});
+
+  // Continuous: the first step is <= one one-pole step, never a slam.
+  const double alpha = 1.0 - std::exp(-1.0 / (kRate * 0.05));
+  CHECK(std::abs(after[0] - before) <= (std::abs(delta_lufs) + 1.0) * alpha);
+  CHECK(std::abs(after.back()) < 0.05);  // re-aimed at the Fast delta ~ 0
+}
+
+// ---------------------------------------------------------------------------
+// R-G4 — the silence hold and its flag are TIME-based (5 s), not
+// slot-count-based: equal on the 5 ms Fast grid and the 100 ms Smooth
+// grid.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: silence hold is time-based on both grids (R-G4)") {
+  auto run = [](dsp::GainMode mode) {
+    dsp::GainComputer g(kRate);
+    g.set_mode(mode);
+    g.set_engaged(true);
+
+    // Settle to +6 dB (wet -6 dB); 4 s also fills Smooth's window.
+    const std::size_t settle_n = seconds(4.0);
+    std::vector<float> tmp;
+    feed(g, sine_1k(-6.0, settle_n), sine_1k(0.0, settle_n), tmp,
+         {479u, 13u});
+    const double settled = g.applied_gain_db();
+    CHECK(settled == Approx(6.0).margin(0.05));
+
+    // 4.9 s of digital silence on the wet tap: held, flag still dark.
+    const std::size_t gap_n = seconds(4.9);
+    const std::vector<float> gap(gap_n, 0.0f);
+    std::vector<float> out;
+    feed(g, gap, sine_1k(0.0, gap_n), out, {479u, 13u});
+    CHECK(g.applied_gain_db() == Approx(settled).margin(1e-6));
+    CHECK(g.flags().no_signal_wet == false);  // 4.9 s < 5 s
+    CHECK(g.flags().dry_tap_missing == false);  // dry never silent
+
+    // A further 0.2 s crosses the 5 s line: the flag lights.
+    const std::size_t tail_n = seconds(0.2);
+    const std::vector<float> tail(tail_n, 0.0f);
+    std::vector<float> out2;
+    feed(g, tail, sine_1k(0.0, tail_n), out2, {479u});
+    CHECK(g.flags().no_signal_wet == true);
+
+    // Real wet audio returns -> the flag clears on the next slot.
+    const std::size_t back_n = seconds(0.5);
+    std::vector<float> out3;
+    feed(g, sine_1k(-6.0, back_n), sine_1k(0.0, back_n), out3, {13u});
+    CHECK(g.flags().no_signal_wet == false);
+  };
+
+  run(dsp::GainMode::fast);
+  run(dsp::GainMode::smooth);
+}
+
+// ---------------------------------------------------------------------------
+// R-G5 — chunk invariance on the 5 ms grid, plus its response time: the
+// target reacts well inside 100 ms, so the gain has left zero 20 ms
+// after the edit (a 100 ms slot could not).
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: Fast chunk invariance and 5 ms response (R-G5)") {
+  const std::size_t pre_n = seconds(0.5);
+  const std::size_t post_n = seconds(0.5);
+  std::vector<float> wet = sine_1k(0.0, pre_n);
+  { const auto tail = sine_1k(-6.0, post_n);
+    wet.insert(wet.end(), tail.begin(), tail.end()); }
+  const std::vector<float> dry = sine_1k(0.0, wet.size());
+
+  dsp::GainComputer g_ragged(kRate);   // default Fast
+  g_ragged.set_ramp_tc(0.05);          // pin the 50 ms value the bounds use
+  g_ragged.set_engaged(true);
+  std::vector<float> out_ragged;
+  feed(g_ragged, wet, dry, out_ragged, {7u, 11u, 13u, 1u, 479u});
+
+  dsp::GainComputer g_uniform(kRate);
+  g_uniform.set_ramp_tc(0.05);
+  g_uniform.set_engaged(true);
+  std::vector<float> out_uniform;
+  feed(g_uniform, wet, dry, out_uniform, {48000u});
+
+  CHECK(out_ragged == out_uniform);
+
+  // 20 ms after the edit: one 5 ms evaluation has fired and the 15 ms
+  // follower is well on its way — the ramp has clearly moved.
+  const std::size_t at = pre_n + seconds(0.02) - 1;
+  CHECK(out_uniform.at(at) > 0.2);
+  CHECK(out_uniform.back() == Approx(6.0).margin(0.05));
+}
+
+// ---------------------------------------------------------------------------
+// R-G6 — the null invariant survives the Fast path: identical taps give
+// an EXACTLY zero delta (the floor HP and the follower see the same
+// samples on both taps).
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: identical taps stay exactly 0 dB in both modes (R-G6)") {
+  const std::size_t n = seconds(3.2);  // keeps Smooth's window valid
+  const std::vector<float> program = noise(n);
+
+  for (const auto mode : {dsp::GainMode::fast, dsp::GainMode::smooth}) {
+    dsp::GainComputer g(kRate);
+    g.set_mode(mode);
+    g.set_engaged(true);
+    std::vector<float> out;
+    feed(g, program, program, out, {7u, 1u, 479u, 13u});
+    CHECK(g.delta_valid());
+    CHECK(g.delta_db() == Approx(0.0).margin(1e-9));
+    CHECK(std::abs(g.applied_gain_db()) < 0.01);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// R-G7 — FR-30: the mode is locked while frozen. A refused switch leaves
+// the mode and the held gain untouched; after release the switch works.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: mode change is refused while frozen (R-G7)") {
+  dsp::GainComputer g = smooth_engine();
+  g.set_engaged(true);
+  std::vector<float> tmp;
+  // Settle +6 (wet -6 dB) so there is a held value to protect.
+  feed(g, sine_1k(-6.0, seconds(4.0)), sine_1k(0.0, seconds(4.0)), tmp,
+       {479u, 13u});
+  const double settled = g.applied_gain_db();
+  CHECK(settled == Approx(6.0).margin(0.05));
+
+  g.set_frozen(true);
+  g.set_mode(dsp::GainMode::fast);   // refused
+  CHECK(g.mode() == dsp::GainMode::smooth);
+  CHECK(g.applied_gain_db() == Approx(settled).margin(1e-9));
+
+  // Content changes under the freeze still do not move the gain.
+  std::vector<float> out;
+  feed(g, sine_1k(-12.0, seconds(0.5)), sine_1k(0.0, seconds(0.5)), out,
+       {13u});
+  CHECK(g.applied_gain_db() == Approx(settled).margin(1e-6));
+
+  g.set_frozen(false);
+  g.set_mode(dsp::GainMode::fast);   // now accepted
+  CHECK(g.mode() == dsp::GainMode::fast);
+}
+
+// ---------------------------------------------------------------------------
+// R-G8 — the M3b legacy shim (m3-plan.md "M3b rulings"): Fast is the
+// default, the Metric switch maps to the mode for one PR, and the
+// Response window setter no longer re-aims anything.
+// ---------------------------------------------------------------------------
+TEST_CASE("gain computer: legacy Metric shim and Fast default (R-G8)") {
+  dsp::GainComputer g(kRate);
+  CHECK(g.mode() == dsp::GainMode::fast);   // FR-28 default
+
+  g.set_metric(dsp::GainMetric::lufs);
+  CHECK(g.mode() == dsp::GainMode::smooth);
+  g.set_metric(dsp::GainMetric::db_rms);
+  CHECK(g.mode() == dsp::GainMode::fast);
+
+  // Response retires with the metric switch: poking set_meter_window
+  // mid-run must change nothing. Two identically fed Smooth engines,
+  // one poked between phases, emit bit-identical trajectories.
+  const std::size_t phase = seconds(1.5);
+  const auto wet = sine_1k(-6.0, phase);
+  const auto dry = sine_1k(0.0, phase);
+
+  dsp::GainComputer plain = smooth_engine();
+  plain.set_engaged(true);
+  std::vector<float> o1, o2;
+  feed(plain, wet, dry, o1, {479u, 13u});
+
+  dsp::GainComputer poked = smooth_engine();
+  poked.set_engaged(true);
+  std::vector<float> p1, p2;
+  feed(poked, wet, dry, p1, {479u, 13u});
+  poked.set_meter_window(0.4);   // no-op in M3b
+  feed(plain, wet, dry, o2, {479u, 13u});
+  feed(poked, wet, dry, p2, {479u, 13u});
+
+  CHECK(o1 == p1);
+  CHECK(o2 == p2);
 }

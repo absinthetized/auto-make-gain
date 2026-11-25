@@ -33,6 +33,8 @@ constexpr double kEvalSlotSec = 0.1;
 GainComputer::GainComputer(double sample_rate)
     : wet_meter_(sample_rate, kMeterWindowSec),
       dry_meter_(sample_rate, kMeterWindowSec),
+      fast_wet_(sample_rate),
+      fast_dry_(sample_rate),
       sample_rate_(sample_rate) {
   set_ramp_tc(kDefaultRampTcSec);
   eval_slot_samples_ =
@@ -44,7 +46,25 @@ GainComputer::GainComputer(double sample_rate)
   hp_scratch_dry_.resize(scratch_n);
 }
 
-void GainComputer::set_metric(GainMetric metric) { metric_ = metric; }
+void GainComputer::set_mode(GainMode mode) {
+  // STUB (RED): stores the choice only. Fast is still evaluated as
+  // Smooth (LUFS on the 100 ms grid) — an obvious placeholder the
+  // RED cases below expose.
+  mode_ = mode;
+}
+
+GainMode GainComputer::mode() const { return mode_; }
+
+void GainComputer::set_metric(GainMetric metric) {
+  // Interim M3b shim: the panel's Metric switch drives the mode.
+  set_mode(metric == GainMetric::db_rms ? GainMode::fast
+                                        : GainMode::smooth);
+}
+
+void GainComputer::set_meter_window(double /*seconds*/) {
+  // Interim M3b shim: the Response window retires with FR-28 (the span
+  // is mode-fixed), so the call does nothing.
+}
 
 void GainComputer::set_max_comp_db(double db) { max_comp_db_ = db; }
 
@@ -116,22 +136,14 @@ void GainComputer::evaluate() {
       (wet_silent_streak_ != 0) || (dry_silent_streak_ != 0);
   const bool delta_ok = fresh && !either_silent;
 
-  // Per-tap readouts (FR §10.6 / PR-C UI): valid snapshots only, in the
-  // CURRENT metric (a wet-only-valid state still shows the wet reading).
-  if (wet_snap.valid)
-    last_wet_db_ = (metric_ == GainMetric::lufs) ? wet_snap.lufs
-                                                 : wet_snap.db_rms;
-  if (dry_snap.valid)
-    last_dry_db_ = (metric_ == GainMetric::lufs) ? dry_snap.lufs
-                                                 : dry_snap.db_rms;
+  // Per-tap readouts (FR §10.6): valid snapshots only. STUB (RED):
+  // Fast is not wired yet, so both modes read the Smooth detector.
+  if (wet_snap.valid) last_wet_db_ = wet_snap.lufs;
+  if (dry_snap.valid) last_dry_db_ = dry_snap.lufs;
 
   // The delta readout tracks valid, non-silent comparisons regardless of
   // engagement — the UI shows the chain delta even while bypassed (§10.6).
-  if (delta_ok) {
-    last_delta_db_ = (metric_ == GainMetric::lufs)
-                         ? wet_snap.lufs - dry_snap.lufs
-                         : wet_snap.db_rms - dry_snap.db_rms;
-  }
+  if (delta_ok) last_delta_db_ = wet_snap.lufs - dry_snap.lufs;
 
   // Policy order matters (PB2e first-run lesson): the FREEZE decision
   // dominates everything — a frozen plugin is a static volume (FR-24),
@@ -181,8 +193,6 @@ double GainComputer::slot_energy(const float* samples, std::size_t count) {
   return sum_sq;
 }
 
-GainMetric GainComputer::metric() const { return metric_; }
-
 GainFlags GainComputer::flags() const { return flags_; }
 
 double GainComputer::applied_gain_db() const { return applied_db_; }
@@ -200,17 +210,6 @@ bool GainComputer::delta_valid() const {
 // are allocation-free and change-guarded so the processor may call them
 // from every processBlock (audio thread) per the A2 crossing pattern.
 // ---------------------------------------------------------------------------
-
-void GainComputer::set_meter_window(double seconds)
-{
-  // Clamp to the capacity-backed span range; guard-compare so the per-
-  // block call is two float writes at steady state.
-  const double clamped = std::min(std::max(seconds, 0.1), kMeterWindowSec);
-  if (clamped == meter_window_) return;
-  meter_window_ = clamped;
-  wet_meter_.set_window(clamped);
-  dry_meter_.set_window(clamped);
-}
 
 void GainComputer::set_frozen(bool frozen)
 {

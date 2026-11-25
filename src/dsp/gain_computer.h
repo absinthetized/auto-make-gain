@@ -6,7 +6,8 @@
 //   dry  = the pre-chain tap, arriving on the aux/sidechain input
 //
 // applied gain target = −(loudness(wet) − loudness(dry)), evaluated on
-// internal 100 ms slots, per selected metric, ramped per-sample toward
+// the active mode's internal grid (Fast 5 ms level / Smooth 100 ms
+// short-term loudness — FR-28), ramped per-sample toward
 // the slot target (one-pole, FR-5's smooth engage/disengage), clamped
 // to ±MaxComp. Program dynamics reach BOTH taps — equal taps mean zero
 // delta, so the plugin does not chase the music; chain EDITS move the
@@ -40,13 +41,21 @@
 #include <cstdint>
 #include <vector>
 
+#include "fast_level.h"
 #include "loudness_meter.h"
 
 namespace makegain::dsp {
 
-// Which metric pair drives the chain delta (FR-6/FR-8 kept, A2 form);
-// both meters always run, so a switch re-targets at the next slot from
-// the same windows — nothing to re-capture.
+// Which detector pair drives the chain delta (FR-28, A5): Fast reads a
+// broadband level, Smooth reads BS.1770 short-term loudness. Both
+// detectors always run, so a switch re-targets at the next evaluation
+// from the same state — nothing to re-capture.
+enum class GainMode { fast = 0, smooth = 1 };
+
+// LEGACY (M3b interim only): the panel still shows the independent
+// Metric/Response switches until M3c. The Metric choice is translated
+// to a mode by set_metric(); GainMetric and the shim setters below are
+// deleted in C7 together with the processor rewrite.
 enum class GainMetric { lufs, db_rms };
 
 // Flags the UI shows (FR §10.6): clamped is live while the target hits
@@ -67,28 +76,35 @@ class GainComputer {
   explicit GainComputer(double sample_rate);
 
   // -- non-audio-time setters ------------------------------------------
-  void set_metric(GainMetric metric);  // targets again at the next slot
+  // Mode (FR-28/FR-30): re-targets at the next evaluation; refused while
+  // frozen (a detector change under a hold would move the readouts).
+  void set_mode(GainMode mode);
   void set_max_comp_db(double db);     // FR-10 clamp bound
   void set_ramp_tc(double seconds);    // one-pole time constant of the ramp
   // Active toggle (A2 §10.3): engaged = delta-nulling; idle = ramp home
   // to 0 dB from wherever the applied gain currently is.
   void set_engaged(bool engaged);
 
+  // -- LEGACY M3b shims (deleted in C7, m3-plan.md "M3b rulings") ------
+  // The pre-M3c panel's Metric switch drives the mode for one PR
+  // (LUFS → Smooth, dB RMS → Fast); the Response window no longer
+  // re-aims anything (the span is mode-fixed), so the setter is a no-op.
+  void set_metric(GainMetric metric);
+  void set_meter_window(double seconds);  // no-op in M3b
+
   // -- A3 (PR-C) engine surfaces (FR-23/24/26), spec'ed by tests
   // R-F1..R-F8:
-  //   set_meter_window: meter-span re-aim (guard-compared, no allocation)
   //   set_frozen:       locks the applied gain; meters stay fed so the
   //                     release re-targets seamlessly from the held value
   //   set_meter_hp:     metering-path high-pass (both taps), coefficients
   //                     allocation-free; cache-compared per call
   //   wet/dry loudness: per-tap readouts captured at each slot evaluation
-  void set_meter_window(double seconds);  // FR-23 (S = 3.0 default, M = 0.4)
   void set_frozen(bool frozen);           // FR-24
   bool frozen() const;
   void set_meter_hp(bool enabled, double hz);  // FR-26 (fixed 24 dB/oct)
-  // Per-tap loudness readouts (FR §10.6 lists wet + dry loudness; PR-C
-  // exposes them through the processor for the UI). Values are the LAST
-  // slot evaluation of the current metric, only meaningful while valid.
+  // Per-tap loudness readouts (FR §10.6): the ACTIVE mode's reading —
+  // a level in Fast, LUFS in Smooth (FR-28's unit rule). Values are the
+  // LAST slot evaluation; only meaningful while valid.
   double wet_loudness_db() const;
   double dry_loudness_db() const;
 
@@ -105,7 +121,7 @@ class GainComputer {
                float* out_gain_db);
 
   // -- reads (cheap, any thread) ----------------------------------------
-  GainMetric metric() const;
+  GainMode mode() const;
   GainFlags flags() const;
   // Current applied gain in dB (0.0 = unity; negative = attenuation).
   double applied_gain_db() const;
@@ -138,16 +154,21 @@ class GainComputer {
   LoudnessMeter dry_meter_;  // aux tap (pre-chain); same engine ⇒ equal
                              // inputs give a usefully EXACT zero delta
 
-  GainMetric metric_ = GainMetric::lufs;
+  // A5 (M3b) Fast detectors, one per tap. STUB (RED): declared and
+  // constructed, but nothing feeds them yet — Fast is evaluated as
+  // Smooth until the GREEN commit wires them.
+  FastLevel fast_wet_;
+  FastLevel fast_dry_;
+
+  GainMode mode_ = GainMode::fast;  // FR-28 default
   bool engaged_ = false;
 
-  // A3 (PR-C): meter response span (FR-23), freeze lock (FR-24) and the
-  // metering-path high-pass (FR-26). The filter is a 4th-order
-  // Butterworth HP = two cascaded double-precision biquads per tap
-  // (direct-form II transposed); both taps share the coefficients but
+  // A3/A5: freeze lock (FR-24) and the metering-path high-pass (FR-26;
+  // in Fast it doubles as the FR-29 band floor). The filter is a
+  // 4th-order Butterworth HP = two cascaded double-precision biquads per
+  // tap (direct-form II transposed); both taps share the coefficients but
   // carry independent state, so equal inputs stay bitwise equal (R-F7).
   bool frozen_ = false;
-  double meter_window_ = kMeterWindowSec;
   bool meter_hp_enabled_ = false;
   double meter_hp_hz_ = 150.0;
 
