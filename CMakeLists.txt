@@ -102,7 +102,11 @@ target_sources(MakeGain PRIVATE
   # .cpp files is deliberate: one truth, two lanes).
   src/dsp/gain_computer.cpp
   src/dsp/loudness_meter.cpp
-  src/dsp/k_weighting.cpp)
+  src/dsp/k_weighting.cpp
+  # M3a added the Fast level follower; GainComputer now constructs it, so
+  # its .cpp must join this target too — omitting it links the plugin
+  # against undefined FastLevel symbols.
+  src/dsp/fast_level.cpp)
 
 target_include_directories(MakeGain PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
