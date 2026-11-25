@@ -73,17 +73,6 @@ void GainComputer::set_mode(GainMode mode) {
 
 GainMode GainComputer::mode() const { return mode_; }
 
-void GainComputer::set_metric(GainMetric metric) {
-  // Interim M3b shim: the panel's Metric switch drives the mode.
-  set_mode(metric == GainMetric::db_rms ? GainMode::fast
-                                        : GainMode::smooth);
-}
-
-void GainComputer::set_meter_window(double /*seconds*/) {
-  // Interim M3b shim: the Response window retires with FR-28 (the span
-  // is mode-fixed), so the call does nothing.
-}
-
 void GainComputer::set_max_comp_db(double db) { max_comp_db_ = db; }
 
 void GainComputer::set_ramp_tc(double seconds) {

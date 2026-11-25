@@ -40,7 +40,9 @@
 //   R-G5  chunk invariance on the 5 ms grid; first response ≤ 10 ms
 //   R-G6  identical taps stay an exact 0 dB delta in BOTH modes
 //   R-G7  mode change refused while frozen (FR-30), accepted after
-//   R-G8  legacy shim: Fast default, set_metric maps, response no-op
+//
+// R-G8 (the interim Metric/window shim) retired in C7 with the shim
+// itself; the Fast default it also checked is pinned by R-G1.
 //
 // The A2/A3 cases pin the SMOOTH detector explicitly (smooth_engine):
 // Smooth keeps today's stage exactly (FR-28). R-D4 retired into R-G3
@@ -128,7 +130,7 @@ void feed(dsp::GainComputer& g, const std::vector<float>& wet,
 // Legacy A2/A3 cases below pin the SMOOTH detector — the 3 s LUFS
 // window and 100 ms grid they were written against (FR-28 keeps
 // Smooth's stage exactly as it was). Fast is the default now and has
-// its own cases R-G1..R-G8 at the end of the file.
+// its own cases R-G1..R-G7 at the end of the file.
 dsp::GainComputer smooth_engine(double rate = kRate) {
   dsp::GainComputer g(rate);
   g.set_mode(dsp::GainMode::smooth);
@@ -608,9 +610,9 @@ TEST_CASE("gain computer: HP off is passthrough to the A2 engine (R-F8)") {
 }
 
 // ===========================================================================
-// A5 (M3b) — R-G1..R-G8: the two compensation modes (FR-28/29/30).
-// RED phase: the stub stores the mode but still evaluates Smooth, so the
-// Fast-path cases below cannot pass.
+// A5 (M3b) — R-G1..R-G7: the two compensation modes (FR-28/29/30).
+// The Fast-path cases fail against the C5 stub and pass against the real
+// engine: they are the guard the mode split was built to satisfy.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
@@ -635,6 +637,7 @@ TEST_CASE("gain computer: Fast settles a chain edit inside 200 ms (R-G1)") {
   };
 
   dsp::GainComputer g_fast(kRate);   // FR-28 default
+  CHECK(g_fast.mode() == dsp::GainMode::fast);
   g_fast.set_ramp_tc(0.05);          // pin the 50 ms default this case assumes
   g_fast.set_engaged(true);
   const auto out_fast = run(g_fast);
@@ -861,42 +864,4 @@ TEST_CASE("gain computer: mode change is refused while frozen (R-G7)") {
   g.set_frozen(false);
   g.set_mode(dsp::GainMode::fast);   // now accepted
   CHECK(g.mode() == dsp::GainMode::fast);
-}
-
-// ---------------------------------------------------------------------------
-// R-G8 — the M3b legacy shim (m3-plan.md "M3b rulings"): Fast is the
-// default, the Metric switch maps to the mode for one PR, and the
-// Response window setter no longer re-aims anything.
-// ---------------------------------------------------------------------------
-TEST_CASE("gain computer: legacy Metric shim and Fast default (R-G8)") {
-  dsp::GainComputer g(kRate);
-  CHECK(g.mode() == dsp::GainMode::fast);   // FR-28 default
-
-  g.set_metric(dsp::GainMetric::lufs);
-  CHECK(g.mode() == dsp::GainMode::smooth);
-  g.set_metric(dsp::GainMetric::db_rms);
-  CHECK(g.mode() == dsp::GainMode::fast);
-
-  // Response retires with the metric switch: poking set_meter_window
-  // mid-run must change nothing. Two identically fed Smooth engines,
-  // one poked between phases, emit bit-identical trajectories.
-  const std::size_t phase = seconds(1.5);
-  const auto wet = sine_1k(-6.0, phase);
-  const auto dry = sine_1k(0.0, phase);
-
-  dsp::GainComputer plain = smooth_engine();
-  plain.set_engaged(true);
-  std::vector<float> o1, o2;
-  feed(plain, wet, dry, o1, {479u, 13u});
-
-  dsp::GainComputer poked = smooth_engine();
-  poked.set_engaged(true);
-  std::vector<float> p1, p2;
-  feed(poked, wet, dry, p1, {479u, 13u});
-  poked.set_meter_window(0.4);   // no-op in M3b
-  feed(plain, wet, dry, o2, {479u, 13u});
-  feed(poked, wet, dry, p2, {479u, 13u});
-
-  CHECK(o1 == p1);
-  CHECK(o2 == p2);
 }

@@ -126,10 +126,12 @@ private:
         { *this, nullptr, "STATE", createParameterLayout() };
 
     std::atomic<float>* activeParam = nullptr;
-    std::atomic<float>* metricParam  = nullptr;   // 0 = LUFS, 1 = dB RMS
     std::atomic<float>* maxcompParam = nullptr;   // 0..48 dB
     std::atomic<float>* ramptcParam  = nullptr;   // seconds
-    std::atomic<float>* responseParam = nullptr;  // 0 = Short, 1 = Fast
+    // M3b: the Response switch is the mode selector until C8 replaces the
+    // panel — 0 = Short (Smooth), 1 = Fast. The `metric` parameter stays
+    // in the layout (the editor binds it) but no longer drives the engine.
+    std::atomic<float>* responseParam = nullptr;
     std::atomic<float>* freezeParam   = nullptr;  // FR-24 lock
     std::atomic<float>* mtrhpParam    = nullptr;  // metering HP enable
     std::atomic<float>* mtrhphzParam  = nullptr;  // metering HP corner Hz

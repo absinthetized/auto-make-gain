@@ -52,12 +52,6 @@ namespace makegain::dsp {
 // from the same state — nothing to re-capture.
 enum class GainMode { fast = 0, smooth = 1 };
 
-// LEGACY (M3b interim only): the panel still shows the independent
-// Metric/Response switches until M3c. The Metric choice is translated
-// to a mode by set_metric(); GainMetric and the shim setters below are
-// deleted in C7 together with the processor rewrite.
-enum class GainMetric { lufs, db_rms };
-
 // Flags the UI shows (FR §10.6): clamped is live while the target hits
 // the MaxComp bound; no_signal is sustained WET silence (≥ 5 s);
 // dry_tap_missing is sustained AUX silence (≥ 5 s) — the honest label
@@ -84,13 +78,6 @@ class GainComputer {
   // Active toggle (A2 §10.3): engaged = delta-nulling; idle = ramp home
   // to 0 dB from wherever the applied gain currently is.
   void set_engaged(bool engaged);
-
-  // -- LEGACY M3b shims (deleted in C7, m3-plan.md "M3b rulings") ------
-  // The pre-M3c panel's Metric switch drives the mode for one PR
-  // (LUFS → Smooth, dB RMS → Fast); the Response window no longer
-  // re-aims anything (the span is mode-fixed), so the setter is a no-op.
-  void set_metric(GainMetric metric);
-  void set_meter_window(double seconds);  // no-op in M3b
 
   // -- A3 (PR-C) engine surfaces (FR-23/24/26), spec'ed by tests
   // R-F1..R-F8:
