@@ -4,7 +4,7 @@
 > plugin format) should be able to read this repo and know where things
 > happen, *without* prior framework knowledge. Maintained per AGENTS.md
 > rule 7 — kept current **at milestone merges** (see `doc/ai/decisions.md`).
-> Last updated: 2026-11-07 (M1 complete through PR-D + PR-E).
+> Last updated: 2026-11-25 (M3 complete: two compensation modes).
 
 ## The one shock: **there is no `main()`**
 
@@ -35,14 +35,14 @@ host (Reaper) ──loads──▶ VST3/CLAP/AU wrapper (JUCE-generated)
 The build system (`juce_add_plugin`) produces one bundle per format from
 the *same* compiled processor — that's the whole multi-format payoff.
 
-## File map (M1 complete)
+## File map
 
 | Path | Role |
 |---|---|
-| `src/plugin/MakeGainProcessor.h/.cpp` | The audio-thread brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Owns the APVTS parameters (see `createParameterLayout`: Active is the only automatable one; the rest are UI-only by design, including zoom) and the thread-safe status atomics the UI polls. The internal-sidechain AGC (FR-10-A2): wet vs dry aux, per 100 ms slot, ramped by `gain_computer`. |
-| `src/ui/MakeGainEditor.h/.cpp` | The window, split by PR-E: `MakeGainEditor` = shell (owns `Timer`@10 Hz + FR-27 zoom: `applyZoom` transforms the **child**, never the editor — JUCE reserves the editor's transform for host scaling); `MakeGainEditor::MainPanel` = child component holding **everything visual** in logical 468×400 space. PR-D's visual grammar lives here: two control skins by control *nature* (modality pill vs on/off checkbox, both drawn in hand-rolled LookAndFeel overrides), the automatable-ring amber mark, dependent greying, the status band (gray/green/red/ice). |
-| `src/dsp/` | The JUCE-free DSP layer (wired in PR-B/C): `k_weighting.{h,cpp}` — ITU BS.1770 K-weighting as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — dual-metric rolling window (short-term LUFS + unweighted dB RMS off the same 100 ms sub-block ring); `gain_computer.{h,cpp}` — the FSM + clamp + one-pole ramp + silence-hold that turns the delta into the applied gain. Pure C++17, no framework types, double-precision internals. |
-| `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness, gain-computer behavior (ramp, clamp, freeze/park). Wired from `CMakeLists.txt` (`makegain_tests`). |
+| `src/plugin/MakeGainProcessor.h/.cpp` | The audio-thread brain + **entry point** (`createPluginFilter`, bottom of the .cpp). Owns the APVTS parameters (see `createParameterLayout`: Active is the only automatable one; the rest are UI-only by design, including Mode and zoom) and the thread-safe status atomics the UI polls. The internal-sidechain AGC (FR-10-A2): wet vs dry aux, evaluated on the mode's grid (Fast 5 ms / Smooth 100 ms), ramped by `gain_computer`. `setStateInformation` also carries the session migration: a tree saved without the `mode` child gets one derived from the retired `metric` choice, so old sessions keep the detector they were hearing. |
+| `src/ui/MakeGainEditor.h/.cpp` | The window, split by PR-E: `MakeGainEditor` = shell (owns `Timer`@10 Hz + FR-27 zoom: `applyZoom` transforms the **child**, never the editor — JUCE reserves the editor's transform for host scaling); `MakeGainEditor::MainPanel` = child component holding **everything visual** in logical 468×400 space. PR-D's visual grammar lives here: two control skins by control *nature* (the Mode modality pill vs on/off checkboxes, both drawn in hand-rolled LookAndFeel overrides), the automatable-ring amber mark, dependent greying (including Mode while frozen), the painted band/span caption beside the applied-gain number, and the status band (gray/green/red/ice). |
+| `src/dsp/` | The JUCE-free DSP layer: `k_weighting.{h,cpp}` — ITU BS.1770 K-weighting as per-sample-rate biquads (DeMan formulation; the +0.691 dB anchor at ~1 kHz is load-bearing for the LUFS constant); `loudness_meter.{h,cpp}` — rolling-window short-term LUFS over 100 ms sub-blocks (it still reports an unweighted dB RMS alongside, which only its tests consume); `fast_level.{h,cpp}` — the Fast detector: a 15 ms one-pole mean square, one per tap; `gain_computer.{h,cpp}` — the delta engine: mode-dependent evaluation grid, metering high-pass (with the 80 Hz Fast floor), clamp, one-pole ramp, freeze, silence-hold. Pure C++17, no framework types, double-precision internals. |
+| `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness, Fast-follower convergence, gain-computer behavior on both grids (mode switch, floor, ramp, clamp, freeze, silence hold). Wired from `CMakeLists.txt` (`makegain_tests`). |
 | `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. |
 | `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 9): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). |
@@ -68,10 +68,17 @@ folders so Reaper sees new builds without manual copying.
   `MainPanel` **child** and sizes the shell around it — see
   `applyZoom` in `MakeGainEditor.cpp` and the doc header above it.
 - **Attachment-free parameter wiring**: choice parameters have no
-  ToggleButton attachment type — the two modality switches are manual
-  glue (`setValueNotifyingHost` on click, `setToggleState(…,
+  ToggleButton attachment type — the Mode switch is manual glue
+  (`setValueNotifyingHost` on click, `setToggleState(…,
   dontSendNotification)` in the poll). The lesson is at the wiring
   sites, commented.
+- **Parameter sets change between versions**: a DAW session stores the
+  parameter tree, so a renamed or retired control must be migrated on
+  load or old sessions silently change behaviour. APVTS serializes each
+  parameter as a child node named by its ID with the value in a `value`
+  property — `migrateLegacyMode` in `MakeGainProcessor.cpp` writes the
+  new child and drops the retired ones before `replaceState` installs
+  the tree.
 - **Anchor constants**: the K-weighting +0.691 dB ~1 kHz anchor and the
   LUFS −0.691 offset pair are load-bearing for the metric's absolute
   level — the goldens in `tests/dsp/` pin them.

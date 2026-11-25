@@ -18,6 +18,32 @@ is doing, and **Active** disengages it whenever you want the raw chain.
 The dry tap comes in on the plugin's **aux input** — the plugin does no
 routing magic, your host carries the signal (next section).
 
+## Fast, Smooth, Freeze — the shape of a session
+
+MakeGain can measure the chain in two ways, and then hold still. The
+three suit different stages of the same job:
+
+- **Fast** — broadband level, ~15 ms span: follows an edit in
+  milliseconds, so you hear the correction while you work.
+- **Smooth** — BS.1770 short-term loudness over 3 s: the ear-accurate
+  reading, deliberately slower.
+- **Freeze** — a deliberate hold: the current gain becomes a static
+  trim, no chasing at all.
+
+The controls are in [The panel](#the-panel) below; this is the shape of
+a session that uses all three:
+
+1. **Build the chain in Fast.** Edits land in tens of milliseconds, so
+   you hear the correction as you bypass or retune a plugin.
+2. **Switch to Smooth once the chain has settled.** The 3 s reading is
+   what a listener perceives — the one to judge the final balance by.
+3. **Freeze when you are happy.** Freeze turns the plugin into a static
+   trimmer at the held gain: no chasing, no movement, and Mode is locked
+   until you release it.
+
+Both detectors stay warm, so switching between the stages costs nothing
+and can be undone at any time.
+
 ## Routing the dry tap
 
 Choose one:
@@ -90,20 +116,26 @@ sources. The engine is channel-count agnostic internally.
 ## The panel
 
 Read the panel top-down: title, the applied-gain readout (the big
-number, flanked by the metric/response switches), three rotary
-parameters with on/off switches below, and the status band at the
-bottom (its color *is* the state).
+number, with the **Mode** pill on its left and the detector's span/band
+caption on its right), three rotary parameters with on/off switches
+below, and the status band at the bottom (its color *is* the state).
 
 | Control | What it does |
 |---|---|
 | **Active** | Engages compensation. The one parameter the host may automate. |
+| **Mode** | Which detector measures the chain: **Fast** (broadband level, ~15 ms span — the reading follows an edit in milliseconds) or **Smooth** (BS.1770 short-term loudness, 3 s — the reading that matches what a listener perceives). Switching is free: both detectors run all the time, so there is no re-measure and no waiting for a window. Locked while Freeze is on. |
 | **MaxComp** | Compensation ceiling in dB (clamps how far the correction may reach). |
-| **Ramp tc** | Time constant of the per-sample ramp: larger = smoother/slower moves. |
-| **Response** | Measurement window: **Short (3 s)** or **Fast (0.4 s)**. |
-| **Metric** | What loudness means here: **LUFS (K-weighted)** or **dB RMS** (unweighted). |
-| **Freeze** | Holds the applied gain at its current value (deliberate hold). While frozen the gain controls are disabled and Meter HP is locked (flipping the metering standard mid-hold would shift numbers under your feet). |
-| **Meter HP** + **freq** | Enables a high-pass on the *metering* only (20–400 Hz, default 150 Hz) — judge loudness without rumble coloring it. |
+| **Ramp tc** | Time constant of the per-sample ramp: larger = smoother/slower moves. It is the dominant term in how fast the gain follows a change — the detector itself settles in milliseconds. |
+| **Freeze** | Holds the applied gain at its current value (deliberate hold). While frozen the gain controls are disabled and Meter HP and Mode are locked (flipping the metering definition mid-hold would shift numbers under your feet). |
+| **Meter HP** + **freq** | Enables a high-pass on the *metering* only (20–400 Hz, default 150 Hz) — judge loudness without rumble coloring it. In **Fast** the metering band is never lower than 80 Hz, because a ~15 ms window cannot resolve deeper bass: the floor applies even with this switch off, and a corner above 80 Hz is used as set. |
 | **Zoom** | Panel zoom, status-band corner: 75–200 %. Manual and persistent; platforms and hosts scale differently, you are the judge. |
+
+Beside the applied-gain number the panel states the detector it is
+showing: **SPAN** (`15 ms` in Fast, `3 s` in Smooth) and **BAND** — the
+metering high-pass corner actually in force (your corner, the 80 Hz
+floor in Fast with the HP off, or `off` in Smooth with the HP off). The
+delta readout follows the same rule: `dB` and `LEVEL` for a Fast level,
+`LU` and `LUFS` for Smooth loudness.
 
 Color grammar of the status band:
 **gray** = standby (nothing happening), **green** = compensating,
@@ -114,7 +146,7 @@ Color grammar of the status band:
 
 Only **Active** is host-automatable; everything else is deliberately
 UI-only ("the user is the judge" — see the FR contract, §10.6). The
-panel marks the automatable control (amber ring). Zoom and switches are
+panel marks the automatable control (amber ring). Zoom and Mode are
 persisted in the session but not automatable.
 
 ## Host-specific quirks

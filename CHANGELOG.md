@@ -6,6 +6,36 @@ and freezes the section at the tag commit. Entries carry only facts
 (what appears, changes, disappears for the *user*) — rationale and
 process live in the ledgers (`doc/ai/`), not here.
 
+## v0.3.0
+
+### Added
+
+- **Two compensation modes**, selected by one **Mode** control:
+  **Fast** (broadband level, ~15 ms span — the default) and **Smooth**
+  (BS.1770 short-term loudness, 3 s). Both detectors run continuously,
+  so switching never re-measures and never waits for a window.
+- The panel states the detector in use beside the applied-gain number:
+  **SPAN** (`15 ms` / `3 s`) and **BAND**, the metering high-pass corner
+  actually in force.
+- Sessions saved before the mode parameter keep the detector they were
+  set to: LUFS → Smooth, dB RMS → Fast.
+
+### Changed
+
+- The chain-delta readout follows the mode: `dB` / `LEVEL` in Fast,
+  `LU` / `LUFS` in Smooth.
+- **Freeze** locks the Mode control as well as the gain controls.
+- In **Fast** the metering band is floored at 80 Hz (a ~15 ms window
+  cannot resolve deeper bass); a Meter HP corner above that is used as
+  set.
+- In **Fast** the response speed is set by `Ramp tc`: the detector
+  settles in milliseconds, the ramp decides how fast the gain follows.
+
+### Removed
+
+- The **Metric** and **Response** switches: the metric follows the mode,
+  and the mode's span replaces the response window.
+
 ## v0.2.1
 
 ### Added
