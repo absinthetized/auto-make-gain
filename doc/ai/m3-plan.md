@@ -131,7 +131,7 @@ commit keeps the eyeball gate.
 | C4 | M3a | **GREEN**: `src/dsp/fast_level.cpp` | source | eyeball + green log |
 | C5 | M3b `pr-m3b-mode-engine` | **RED**: `tests/dsp/gain_computer_test.cpp` additions (R-G1..R-G8) + honest stub, legacy cases re-pinned to Smooth; failing output quoted | source | eyeball + failing log |
 | C6 | M3b | **GREEN**: `src/dsp/gain_computer.{h,cpp}` (mode, grid, floor, time-based silence) | source | eyeball + green log |
-| C7 | M3b | **GREEN**: `src/plugin/MakeGainProcessor.{h,cpp}` (`mode` param, wiring, legacy migration) + delete the interim engine shim | source | eyeball + green log |
+| C7 | M3b | **GREEN**: `src/plugin/MakeGainProcessor.{h,cpp}` — reuse `response` as the mode selector (default Fast), leave `metric` a dead switch, delete the interim engine shim + retire R-G8; `mode` param/migration deferred to C8 (owner, 2026-11-25) | source | eyeball + green log |
 | C8 | M3c `pr-m3c-ui-docs` | UI iteration: one Mode pill, span caption in the freed flank, freeze lock, delta captions | source | owner eyeball on host **before** commit |
 | C9 | M3c | Human docs: `usage.md` panel table + detector band, `code-tour.md` file map, `CHANGELOG.md` Unreleased | docs | owner reads text |
 
@@ -161,10 +161,15 @@ it keeps pinning today's stage across the default flip to Fast.
 
 ### M3b rulings
 
-- Interim shim (owner, 2026-11-25): the panel's Metric switch drives the
-  Mode for this PR only (`LUFS → Smooth`, `dB RMS → Fast`); Response is
-  ignored. `set_metric` / `set_meter_window` live in the engine as
-  shims until C7 removes them with the processor rewrite.
+- Interim shim (owner, 2026-11-25; **superseded by the C7 ruling
+  below**): the panel's Metric switch drove the Mode
+  (`LUFS → Smooth`, `dB RMS → Fast`) and `set_metric` /
+  `set_meter_window` lived in the engine as shims through C6.
+- C7 wiring (owner, 2026-11-25, supersedes the Metric→Mode shim row):
+  minimal GUI this phase. The Response switch drives the mode
+  (`Short → Smooth`, `Fast → Fast`, default flipped to Fast); Metric
+  stays bound but ignored. The engine shims and R-G8 retire here; the
+  `mode` parameter and legacy migration land with the C8 panel.
 - RED-gap note: at the stub's fixed 100 ms grid, R-G4/R-G6/R-G8 pass by
   construction — they guard the C6 grid change, not the stub's absence
   of it. Stated in the C5 message rather than hidden.
