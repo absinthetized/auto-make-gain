@@ -51,6 +51,16 @@
      `MakeGain_All`, not just `makegain_tests`; the two targets keep
      separate source lists, so the test lane cannot catch a missing
      plugin source.
+     - **`MakeGain_All` does not include CLAP** (owner hit it,
+       2026-11-25): `MakeGain_All` comes from `juce_add_plugin`
+       (`FORMATS VST3 AU`), while the CLAP bundle is the separate
+       `MakeGain_CLAP` target layered on by `clap_juce_extensions`.
+       A `--target MakeGain_All` build leaves the installed CLAP
+       bundle stale, so a host loaded an old binary that still showed
+       the previous panel. A full default build (`cmake --build
+       build/<preset>`, what `check-all.sh` runs) covers it. CI must
+       build the default all-target, or `MakeGain_All` + `MakeGain_CLAP`
+       explicitly.
 
 3. **Three-stage workflow — Fast, then Smooth, then Freeze** (owner,
    2026-11-25). A use case discovered in real use, queued as a
