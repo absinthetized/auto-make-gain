@@ -33,8 +33,8 @@
 //   getStateInformation()/setStateInformation() — host, saving/loading the
 //                        session (FR-22, narrowed by A2: parameters only).
 //
-// Parameters (A2): Active is the only automatable parameter (UX-Q4);
-// Metric/MaxComp/Ramp follow as UI-only parameters in PR-B3.
+// Parameters (A2): Active is the only automatable parameter (FR-15);
+// Mode/MaxComp/Ramp/Freeze/Meter HP/Zoom are UI-only (FR-14, FR-22).
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -116,6 +116,12 @@ private:
     // plugin (APVTS owns the params; the editor attaches to them).
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+    // C8 legacy migration (called from setStateInformation, before the
+    // restored tree is installed): a pre-C8 session carries no `mode`
+    // child, so one is derived from the retired `metric` choice; the
+    // retired children are then dropped so the next save is current-state.
+    static void migrateLegacyMode (juce::ValueTree& state);
+
     // AudioProcessorValueTreeState (APVTS): JUCE's standard parameter +
     // persistence machinery. "In framework terms": the host asks us for a
     // list of parameters; each is exposed as an atomic<float> the audio
@@ -128,10 +134,11 @@ private:
     std::atomic<float>* activeParam = nullptr;
     std::atomic<float>* maxcompParam = nullptr;   // 0..48 dB
     std::atomic<float>* ramptcParam  = nullptr;   // seconds
-    // M3b: the Response switch is the mode selector until C8 replaces the
-    // panel — 0 = Short (Smooth), 1 = Fast. The `metric` parameter stays
-    // in the layout (the editor binds it) but no longer drives the engine.
-    std::atomic<float>* responseParam = nullptr;
+    // C8 (FR-28): the Mode choice — 0 = Fast (default), 1 = Smooth. It
+    // replaced the retired Metric switch and the interim Response
+    // selector; the engine reads it through set_mode, and
+    // setStateInformation migrates old sessions onto it.
+    std::atomic<float>* modeParam = nullptr;
     std::atomic<float>* freezeParam   = nullptr;  // FR-24 lock
     std::atomic<float>* mtrhpParam    = nullptr;  // metering HP enable
     std::atomic<float>* mtrhphzParam  = nullptr;  // metering HP corner Hz

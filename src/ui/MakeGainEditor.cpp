@@ -86,15 +86,14 @@ MakeGainEditor::MainPanel::MainPanel (MakeGainProcessor& p)
 {
     // Attached toggles (bool parameters: ButtonAttachment does both
     // directions — user click to parameter, host persistence to button).
-    // Switch redesign, owner-iteration 3 (PR-D): the two modality
-    // switches wear the shared sliding-pill LookAndFeel; the three
-    // on/off booleans above use the BooleanCheckboxLnf so their caption
-    // sits below the tick (native rendering puts it beside).
+    // Switch redesign, owner-iteration 3 (PR-D): the modality pill wears
+    // the shared sliding-pill LookAndFeel; the three on/off booleans use
+    // the BooleanCheckboxLnf so their caption sits below the tick
+    // (native rendering puts it beside).
     activeButton.setLookAndFeel (&booleanCheckboxLnf);
     freezeButton.setLookAndFeel (&booleanCheckboxLnf);
     mtrhpButton.setLookAndFeel (&booleanCheckboxLnf);
-    metricSwitch.setLookAndFeel (&modalitySwitchLnf);
-    responseSwitch.setLookAndFeel (&modalitySwitchLnf);
+    modeSwitch.setLookAndFeel (&modalitySwitchLnf);
     addAndMakeVisible (activeButton);
     addAndMakeVisible (freezeButton);
     addAndMakeVisible (mtrhpButton);
@@ -105,25 +104,19 @@ MakeGainEditor::MainPanel::MainPanel (MakeGainProcessor& p)
     mtrhpAttach = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processorRef.getApvts(), "mtrhp", mtrhpButton);
 
-    // Manual glue for the two 2-choice parameters (Metric, Response).
-    // A 2-choice APVTS parameter stores its selection as a normalized
-    // 0/1; this switch forwards clicks 0/1 and refresh() reflects the
-    // storage's latest value back onto the button (both directions see
-    // host automation/persistence without a dedicated attachment type).
-    metricSwitch.onClick = [this]
+    // Manual glue for the one 2-choice parameter left (Mode). A 2-choice
+    // APVTS parameter stores its selection as a normalized 0/1; this
+    // switch forwards clicks 0/1 and refresh() reflects the storage's
+    // latest value back onto the button (both directions see host
+    // persistence without a dedicated attachment type). Index 1 = Smooth
+    // sits on the pill's right side.
+    modeSwitch.onClick = [this]
     {
-        processorRef.getApvts().getParameter ("metric")
-             ->setValueNotifyingHost (metricSwitch.getToggleState() ? 1.0f
-                                                                    : 0.0f);
+        processorRef.getApvts().getParameter ("mode")
+             ->setValueNotifyingHost (modeSwitch.getToggleState() ? 1.0f
+                                                                  : 0.0f);
     };
-    responseSwitch.onClick = [this]
-    {
-        processorRef.getApvts().getParameter ("response")
-             ->setValueNotifyingHost (responseSwitch.getToggleState() ? 1.0f
-                                                                      : 0.0f);
-    };
-    addAndMakeVisible (metricSwitch);
-    addAndMakeVisible (responseSwitch);
+    addAndMakeVisible (modeSwitch);
 
     // The three rotaries (SliderAttachment = parameter <-> control in
     // both directions; range/skew come from the NormalisableRange).
@@ -157,27 +150,44 @@ MakeGainEditor::MainPanel::MainPanel (MakeGainProcessor& p)
 void MakeGainEditor::MainPanel::refresh()
 {
     const bool valid = processorRef.uiDeltaValid();
-    const bool rms = processorRef.getApvts()
-                         .getRawParameterValue ("metric")->load() > 0.5f;
-    const bool fast = processorRef.getApvts()
-                          .getRawParameterValue ("response")->load() > 0.5f;
+    const bool smooth = processorRef.getApvts()
+                            .getRawParameterValue ("mode")->load() > 0.5f;
+    const bool hpOn = processorRef.getApvts()
+                          .getRawParameterValue ("mtrhp")->load() > 0.5f;
 
     appliedText = juce::String (processorRef.uiAppliedDb(), 1) + " dB";
+    // FR-12: the delta carries the mode's unit and name — Fast reads a
+    // broadband LEVEL in dB, Smooth reads BS.1770 loudness in LU.
     deltaText   = valid
         ? "chain delta " + juce::String (processorRef.uiDeltaDb(), 1)
-              + (rms ? " dB" : " LU")
+              + (smooth ? " LU" : " dB")
         : "chain delta - no full window yet";
-    metricCaption = rms ? "CHAIN DELTA (dB RMS)" : "CHAIN DELTA (LUFS)";
+    deltaCaption = smooth ? "CHAIN DELTA (LUFS)" : "CHAIN DELTA (LEVEL)";
 
-    // Reflect the two choice parameters onto their switches (activity
-    // made on the parameter side — session reload, our own click —
-    // both land here; toggles without a notify callback stay inert).
-    if (rms != metricSwitch.getToggleState())
-        metricSwitch.setToggleState (rms, juce::dontSendNotification);
-    metricSwitch.setButtonText (rms ? "dB RMS" : "LUFS");
-    if (fast != responseSwitch.getToggleState())
-        responseSwitch.setToggleState (fast, juce::dontSendNotification);
-    responseSwitch.setButtonText (fast ? "Fast" : "Short");
+    // C8 (FR-12): band and span of the detector actually in use. In Fast
+    // the band is the FR-29 corner — the user's Meter HP corner when that
+    // sits above 80 Hz, otherwise the 80 Hz floor (applied even with the
+    // HP off). Smooth is K-weighted with no floor.
+    if (smooth)
+    {
+        spanText = "3 s";
+        bandText = "K-weighted";
+    }
+    else
+    {
+        const float hz = processorRef.getApvts()
+                             .getRawParameterValue ("mtrhphz")->load();
+        spanText = "15 ms";
+        bandText = juce::String (juce::roundToInt (hpOn ? juce::jmax (hz, 80.0f)
+                                                       : 80.0f)) + " Hz";
+    }
+
+    // Reflect the Mode parameter onto its switch (activity made on the
+    // parameter side — session reload, our own click — lands here; a
+    // toggle without a notify callback stays inert).
+    if (smooth != modeSwitch.getToggleState())
+        modeSwitch.setToggleState (smooth, juce::dontSendNotification);
+    modeSwitch.setButtonText (smooth ? "Smooth" : "Fast");
 
     // Dependent-control greying (PR-D owner rulings):
     //   Meter HP off  -> the MTR HP FREQ rotary does nothing (filtered
@@ -189,10 +199,11 @@ void MakeGainEditor::MainPanel::refresh()
     //                    definition mid-hold shifts the readouts under
     //                    the hold (false alarm) and leaves a different
     //                    HP state at release.
+    //   Freeze on     -> the Mode pill locks too (FR-30): the engine
+    //                    refuses a switch while frozen, so the panel must
+    //                    not offer it (honest affordance).
     // Component::setEnabled/setAlpha no-op cheaply on unchanged values,
     // so the poll costs nothing at steady state.
-    const bool hpOn = processorRef.getApvts()
-                          .getRawParameterValue ("mtrhp")->load() > 0.5f;
     const bool frozen = processorRef.uiFrozen();
     mtrhphzSlider.setEnabled (hpOn && !frozen);
     mtrhphzSlider.setAlpha ((hpOn && !frozen) ? 1.0f : 0.35f);
@@ -202,20 +213,19 @@ void MakeGainEditor::MainPanel::refresh()
     ramptcSlider.setEnabled (!frozen);
     maxcompSlider.setAlpha (frozen ? 0.35f : 1.0f);
     ramptcSlider.setAlpha (frozen ? 0.35f : 1.0f);
+    modeSwitch.setEnabled (!frozen);
+    modeSwitch.setAlpha (frozen ? 0.35f : 1.0f);
 
     repaint();
 }
 
 void MakeGainEditor::MainPanel::resized()
 {
-    // Variant-A layout (PR-D, owner): the two modality pills LEAVE the
-    // strip and flank the applied-gain number, aligned to the side
-    // COLUMNS (same x/width as MaxComp + Active on the left, Mtr HP
-    // freq + its checkbox on the right) — the grid reads straight down
-    // on both flanks. Metric describes what the number means, Fast how
-    // it moves. (Same 54px height as the strip controls.)
-    metricSwitch.setBounds (14, 48, 144, 54);
-    responseSwitch.setBounds (310, 48, 144, 54);
+    // Variant-A layout (PR-D, owner), re-flowed by C8: the ONE Mode pill
+    // keeps the left flank (it says what the number means), aligned to
+    // the MaxComp + Active column; the freed right flank carries the
+    // band/span caption block painted in paint() (same 54px height).
+    modeSwitch.setBounds (14, 48, 144, 54);
 
     // Rotary row: MaxComp / Ramp tc / Meter-HP frequency. Widths match
     // the painted captions in paint() (three equal columns).
@@ -275,11 +285,32 @@ void MakeGainEditor::MainPanel::paint (juce::Graphics& g)
     readouts.removeFromTop (44);
     g.setFont (juce::FontOptions (11.0f));
     g.setColour (juce::Colour (0xff8a9099));
-    g.drawText (metricCaption, readouts.removeFromTop (16),
+    g.drawText (deltaCaption, readouts.removeFromTop (16),
                 juce::Justification::centred);
     g.setFont (juce::FontOptions (14.0f));
     g.setColour (juce::Colour (0xffc8d2e6));
     g.drawText (deltaText, readouts, juce::Justification::centred);
+
+    // C8 (FR-12): the freed right flank states the active detector's
+    // band and span, so the panel says which reading the delta is. Two
+    // caption+value pairs, inside the pill row's right column.
+    {
+        auto flank = juce::Rectangle<int> { 310, 48, 144, 54 };
+        auto line  = flank.removeFromTop (27);
+        auto pair = [&] (const juce::String& label, const juce::String& value,
+                         juce::Rectangle<int> area)
+        {
+            auto labelArea = area.removeFromLeft (46);
+            g.setFont (juce::FontOptions (10.0f));
+            g.setColour (juce::Colour (0xff8a9099));   // dim caption
+            g.drawText (label, labelArea, juce::Justification::centredRight);
+            g.setColour (juce::Colour (0xffc8d2e6));   // value ink
+            g.drawText (value, area.reduced (6, 0),
+                        juce::Justification::centredLeft);
+        };
+        pair ("SPAN", spanText, line);
+        pair ("BAND", bandText, flank);
+    }
 
     // Control captions. Toggle switches carry their own captions; the
     // rotaries need name + unit captions here (positions track the

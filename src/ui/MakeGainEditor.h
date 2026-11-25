@@ -88,10 +88,9 @@ private:
 
     // Shared custom LookAndFeel (PR-D switch redesign, re-scoped by
     // owner): renders ToggleButtons as sliding modality pills with a
-    // caption. One instance for both choice switches — the caption is
-    // the live selection text (the timer already maintains it: "LUFS"
-    // / "dB RMS", "SHORT" / "FAST") and stays bright in BOTH states
-    // (a modality has no off, so no dimming).
+    // caption. The caption is the live selection text, maintained by the
+    // panel refresh ("Fast" / "Smooth" since C8) and stays bright in BOTH
+    // states (a modality has no off, so no dimming).
     struct ModalitySwitchLnf : juce::LookAndFeel_V4
     {
         void drawToggleButton (juce::Graphics&, juce::ToggleButton&,
@@ -111,11 +110,12 @@ private:
     };
     BooleanCheckboxLnf booleanCheckboxLnf;
 
-    // Switch buttons over 2-choice parameters (no attachment type maps
-    // choice→button, so the glue is manual both ways — see refresh()
-    // and the on-capture in the constructor).
-    juce::ToggleButton metricSwitch;    // LUFS (S) / dB RMS
-    juce::ToggleButton responseSwitch;  // Short (3 s) / Fast (0.4 s)
+    // Switch button over the ONE 2-choice parameter (no attachment type
+    // maps choice→button, so the glue is manual both ways — see
+    // refresh() and the on-capture in the constructor).
+    // C8 (FR-28): Mode replaces the retired Metric and Response switches;
+    // it is the only modality left on the panel.
+    juce::ToggleButton modeSwitch;      // Fast / Smooth
 
     // The three rotaries: compensation strength, ramp feel, metering HP
     // corner. Range/skew come from the APVTS NormalisableRange.
@@ -138,7 +138,10 @@ private:
 
     // Readout strings refreshed by refresh(), drawn in paint().
     juce::String appliedText, deltaText;
-    juce::String metricCaption { "CHAIN DELTA" };
+    juce::String deltaCaption { "CHAIN DELTA (LEVEL)" };
+    // C8 (FR-12): the freed flank states the active detector's band and
+    // span, so the panel says what the delta number was measured with.
+    juce::String spanText { "15 ms" }, bandText { "80 Hz" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
 };
