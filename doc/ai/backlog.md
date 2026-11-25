@@ -36,6 +36,13 @@
      never in play. Treat as build hygiene, reviewed on its own; the
      owner judged it a separate activity from the M3 work, not a C5
      fix-up.
+   - **CI builds the plugin target** (origin `d9d5ae5`): M3a's C4
+     commit added `src/dsp/fast_level.cpp` to the test target only, so
+     the VST3/AU/CLAP bundles had not linked since that commit and
+     nothing noticed until a manual host rebuild. CI must build
+     `MakeGain_All`, not just `makegain_tests`; the two targets keep
+     separate source lists, so the test lane cannot catch a missing
+     plugin source.
 
 ## Open loose ends (not new work)
 
@@ -46,3 +53,6 @@
 - Pen payload refresh: `~/Desktop/makegain-linux-arts-55f2909/` holds
   JUCE-9.0.5-verified aarch64 VST3 + CLAP + JSFX TAP scripts, copied
   from the M2c lane artifacts.
+- Fast vs Smooth on program material: the M3b acceptance is perceptual
+  (2026-11-25); R-G1/R-G2 measure convergence on synthetic signals
+  only. A rendered comparison would make the host verdict checkable.

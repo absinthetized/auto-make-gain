@@ -138,6 +138,11 @@ commit keeps the eyeball gate.
 Sizing: 9 commits; source files per PR — M3a 3 (+CMake), M3b 5, M3c 2.
 All inside the AGENTS.md reference metrics.
 
+**Status**: C5–C7 are on `pr-m3b-mode-engine`, plus a build fix
+(`d9d5ae5`: `fast_level.cpp` was missing from the plugin target) and the
+ledger updates. The owner host-accepted M3b at `d9d5ae5` — verdict is
+perceptual (see `decisions.md`). C8/C9 open.
+
 ## Proposed test IDs (RED commits)
 
 - **R-G1** Fast converges after a chain edit within a stated bound
