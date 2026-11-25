@@ -6,7 +6,8 @@
 //   dry  = the pre-chain tap, arriving on the aux/sidechain input
 //
 // applied gain target = −(loudness(wet) − loudness(dry)), evaluated on
-// internal 100 ms slots, per selected metric, ramped per-sample toward
+// the active mode's internal grid (Fast 5 ms level / Smooth 100 ms
+// short-term loudness — FR-28), ramped per-sample toward
 // the slot target (one-pole, FR-5's smooth engage/disengage), clamped
 // to ±MaxComp. Program dynamics reach BOTH taps — equal taps mean zero
 // delta, so the plugin does not chase the music; chain EDITS move the
@@ -40,14 +41,16 @@
 #include <cstdint>
 #include <vector>
 
+#include "fast_level.h"
 #include "loudness_meter.h"
 
 namespace makegain::dsp {
 
-// Which metric pair drives the chain delta (FR-6/FR-8 kept, A2 form);
-// both meters always run, so a switch re-targets at the next slot from
-// the same windows — nothing to re-capture.
-enum class GainMetric { lufs, db_rms };
+// Which detector pair drives the chain delta (FR-28, A5): Fast reads a
+// broadband level, Smooth reads BS.1770 short-term loudness. Both
+// detectors always run, so a switch re-targets at the next evaluation
+// from the same state — nothing to re-capture.
+enum class GainMode { fast = 0, smooth = 1 };
 
 // Flags the UI shows (FR §10.6): clamped is live while the target hits
 // the MaxComp bound; no_signal is sustained WET silence (≥ 5 s);
@@ -67,7 +70,9 @@ class GainComputer {
   explicit GainComputer(double sample_rate);
 
   // -- non-audio-time setters ------------------------------------------
-  void set_metric(GainMetric metric);  // targets again at the next slot
+  // Mode (FR-28/FR-30): re-targets at the next evaluation; refused while
+  // frozen (a detector change under a hold would move the readouts).
+  void set_mode(GainMode mode);
   void set_max_comp_db(double db);     // FR-10 clamp bound
   void set_ramp_tc(double seconds);    // one-pole time constant of the ramp
   // Active toggle (A2 §10.3): engaged = delta-nulling; idle = ramp home
@@ -76,26 +81,25 @@ class GainComputer {
 
   // -- A3 (PR-C) engine surfaces (FR-23/24/26), spec'ed by tests
   // R-F1..R-F8:
-  //   set_meter_window: meter-span re-aim (guard-compared, no allocation)
   //   set_frozen:       locks the applied gain; meters stay fed so the
   //                     release re-targets seamlessly from the held value
   //   set_meter_hp:     metering-path high-pass (both taps), coefficients
   //                     allocation-free; cache-compared per call
   //   wet/dry loudness: per-tap readouts captured at each slot evaluation
-  void set_meter_window(double seconds);  // FR-23 (S = 3.0 default, M = 0.4)
   void set_frozen(bool frozen);           // FR-24
   bool frozen() const;
   void set_meter_hp(bool enabled, double hz);  // FR-26 (fixed 24 dB/oct)
-  // Per-tap loudness readouts (FR §10.6 lists wet + dry loudness; PR-C
-  // exposes them through the processor for the UI). Values are the LAST
-  // slot evaluation of the current metric, only meaningful while valid.
+  // Per-tap loudness readouts (FR §10.6): the ACTIVE mode's reading —
+  // a level in Fast, LUFS in Smooth (FR-28's unit rule). Values are the
+  // LAST slot evaluation; only meaningful while valid.
   double wet_loudness_db() const;
   double dry_loudness_db() const;
 
   // -- audio thread -----------------------------------------------------
   // Feed BOTH mono sums (wet, dry) and advance over `count` samples; any
   // block size (ragged, huge, zero) is safe; the per-sample ramp math is
-  // identical regardless of blocking (pinned by the R-D8 test). When
+  // identical regardless of blocking (pinned by the chunk-invariance
+  // tests on both grids). When
   // out_gain_db is set, it receives the applied gain in dB AFTER each
   // sample's ramp step — the values the processor multiplies both
   // channels by (10^(dB/20), FR-11). Caller owns `count` slots; writing
@@ -105,15 +109,16 @@ class GainComputer {
                float* out_gain_db);
 
   // -- reads (cheap, any thread) ----------------------------------------
-  GainMetric metric() const;
+  GainMode mode() const;
   GainFlags flags() const;
   // Current applied gain in dB (0.0 = unity; negative = attenuation).
   double applied_gain_db() const;
   // The last evaluated chain delta (wet − dry, current metric, BEFORE
   // the sign flip that feeds the target) — a UI readout (FR §10.6).
   double delta_db() const;
-  // True once BOTH meters hold a full window (freshness floor for the
-  // delta; until then the target holds).
+  // Freshness floor for the delta; until then the target holds. Smooth:
+  // both meters hold a full window. Fast: both detectors are past their
+  // warm-up. Mode-dependent by design (FR-28).
   bool delta_valid() const;
 
   // Code constants (FR-2's "not a UI setting" spirit, A2 form: window /
@@ -126,28 +131,41 @@ class GainComputer {
   static constexpr double kDefaultRampTcSec = 0.05;  // 50 ms ramp (FR-5)
   // A2 §10.4: MaxComp default lowered 24 → 16 dB (range 0–48 unchanged).
   static constexpr double kDefaultMaxCompDb = 16.0;
-  // Wall-slot silence threshold (newest 100 ms mean square ≤ this ⇒
+  // Wall-slot silence threshold (newest slot's mean square ≤ this ⇒
   // digitally silent input, ≈ −120 dB FS). Same definition as the M1
   // meter-era gate: drives the hold AND both flags' streaks.
   static constexpr double kSilenceMeanSq = 1e-12;
-  // 5.0 s of 100 ms slots (TS §9 ③) before a silence flag lights.
-  static constexpr std::size_t kNoSignalSlots = 50;
+  // 5.0 s of sustained silence before a flag lights (TS §9 ③). Time-
+  // based, not slot-count-based: the two modes run different grids.
+  static constexpr double kNoSignalSec = 5.0;
+  // Evaluation grids (FR-28): Fast re-aims every 5 ms, Smooth keeps the
+  // BS.1770 100 ms convention. Also the Fast detector band floor (FR-29).
+  static constexpr double kFastEvalSlotSec = 0.005;
+  static constexpr double kSmoothEvalSlotSec = 0.1;
+  static constexpr double kFastHpFloorHz = 80.0;
+  // Fast detector warm-up: 5 time constants before its level is trusted.
+  static constexpr double kFastWarmupSec = 5.0 * 0.015;
 
  private:
   LoudnessMeter wet_meter_;  // main input (chain-processed)
   LoudnessMeter dry_meter_;  // aux tap (pre-chain); same engine ⇒ equal
                              // inputs give a usefully EXACT zero delta
 
-  GainMetric metric_ = GainMetric::lufs;
+  // A5 (M3b) Fast detectors, one per tap. Both run in BOTH modes, so a
+  // mode switch re-targets from warm state (FR-28, "both detectors
+  // always run").
+  FastLevel fast_wet_;
+  FastLevel fast_dry_;
+
+  GainMode mode_ = GainMode::fast;  // FR-28 default
   bool engaged_ = false;
 
-  // A3 (PR-C): meter response span (FR-23), freeze lock (FR-24) and the
-  // metering-path high-pass (FR-26). The filter is a 4th-order
-  // Butterworth HP = two cascaded double-precision biquads per tap
-  // (direct-form II transposed); both taps share the coefficients but
+  // A3/A5: freeze lock (FR-24) and the metering-path high-pass (FR-26;
+  // in Fast it doubles as the FR-29 band floor). The filter is a
+  // 4th-order Butterworth HP = two cascaded double-precision biquads per
+  // tap (direct-form II transposed); both taps share the coefficients but
   // carry independent state, so equal inputs stay bitwise equal (R-F7).
   bool frozen_ = false;
-  double meter_window_ = kMeterWindowSec;
   bool meter_hp_enabled_ = false;
   double meter_hp_hz_ = 150.0;
 
@@ -166,22 +184,32 @@ class GainComputer {
     void clear() { x1 = x2 = y1 = y2 = 0.0; }
   };
   struct HpStage { HpBiquad q1, q2; void clear() { q1.clear(); q2.clear(); } };
-  HpStage hp_wet_stage_, hp_dry_stage_;
+  // Two independent filter chains per tap: Smooth applies the user HP
+  // only when enabled (today's stage, untouched); Fast ALWAYS filters at
+  // max(user, 80) — the FR-29 band floor — because its broadband level
+  // would otherwise chase rumble the loudness meter ignores.
+  HpStage hp_smooth_wet_, hp_smooth_dry_;
+  HpStage hp_fast_wet_, hp_fast_dry_;
   double hp_stage_Q1_ = 0.5411961001461970;  // Butterworth 4th: 1/(2·cos15°)
   double hp_stage_Q2_ = 1.3065629648763766;  // Butterworth 4th: 1/(2·sin15°)
 
-  // Meter feeds, HP-filtered when enabled: scratch buffers sized once at
-  // construction (max = one eval-slot chunk), reused per block.
+  // Meter feeds, HP-filtered: scratch buffers sized once at construction
+  // (max = the larger 100 ms eval slot), reused per block.
   std::vector<float> hp_scratch_wet_, hp_scratch_dry_;
+  std::vector<float> fast_scratch_wet_, fast_scratch_dry_;
 
   // Per-tap loudness readouts (FR §10.6), captured on each slot
   // evaluation in the CURRENT metric; sentinel 0.0 until first valid.
   double last_wet_db_ = 0.0;
   double last_dry_db_ = 0.0;
 
-  // (Re)computes the HP stage coefficients for `hz`; called only when
-  // the caller's cache guard sees a real change. Allocation-free.
-  void recompute_hp_coefficients(double hz);
+  // (Re)computes one stage pair for `hz`; called only when set_meter_hp
+  // sees a real change. Both taps of the pair share coefficients.
+  // Allocation-free.
+  void recompute_hp_coefficients(HpStage& wet, HpStage& dry, double hz);
+  // Rebuilds eval_slot_samples_ for the active mode and drops any
+  // partial slot (mode change mid-slot: no stale energy carried over).
+  void rebuild_grid();
   // Filters `count` samples through one tap's 4th-order HP into `out`
   // (mutates the stage's state, obviously; no allocation).
   void hp_process(HpStage& stage, const float* in, float* out,
@@ -197,17 +225,19 @@ class GainComputer {
   double target_db_ = 0.0;   // what the ramp currently chases
   double last_delta_db_ = 0.0;  // last evaluated wet − dry (UI readout)
 
-  // Evaluation-slot schedule (internal fixed 100 ms schedule; the R-D8
-  // invariance needs AN internal schedule, and one only).
+  // Evaluation-slot schedule: mode-derived (Fast 5 ms, Smooth 100 ms).
+  // The R-D8 invariance needs AN internal schedule per mode, and one only.
   double alpha_ = 0.0;
-  std::uint64_t eval_slot_samples_ = 0;
+  std::uint64_t eval_slot_samples_ = 1;
   std::uint64_t slot_fed_ = 0;
+  std::uint64_t total_fed_ = 0;   // Fast warm-up (detector trust floor)
 
-  // Wall-side silence detection per tap (hold gate + flag streaks).
+  // Wall-side silence detection per tap (hold gate + flag streaks). The
+  // streak is accumulated in SECONDS so both grids meet the same 5 s.
   double wet_slot_sq_ = 0.0;
   double dry_slot_sq_ = 0.0;
-  std::size_t wet_silent_streak_ = 0;
-  std::size_t dry_silent_streak_ = 0;
+  double wet_silent_sec_ = 0.0;
+  double dry_silent_sec_ = 0.0;
 
   // Slot-boundary work: delta evaluation + flag bookkeeping.
   void evaluate();

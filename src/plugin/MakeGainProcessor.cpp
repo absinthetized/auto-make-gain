@@ -27,7 +27,6 @@ MakeGainProcessor::MakeGainProcessor()
     // any parameter change). Editor-side code never touches these raw
     // pointers; it attaches to the parameter objects instead (PR-B3).
     activeParam = apvts.getRawParameterValue ("active");
-    metricParam  = apvts.getRawParameterValue ("metric");
     maxcompParam = apvts.getRawParameterValue ("maxcomp");
     ramptcParam  = apvts.getRawParameterValue ("ramptc");
     responseParam = apvts.getRawParameterValue ("response");
@@ -72,9 +71,13 @@ MakeGainProcessor::createParameterLayout()
         juce::AudioParameterFloatAttributes().withAutomatable (false));
     layout.add (std::move (ramptc));
 
+    // M3b: this switch selects the compensation MODE until C8 replaces the
+    // panel. Short maps to Smooth (3 s LUFS), Fast to the Fast level
+    // detector; the default is Fast (FR-28). The old "0.4 s" label is
+    // stale and is retired with the panel.
     auto response = std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "response", 1 }, "Response",
-        juce::StringArray { "Short (3 s)", "Fast (0.4 s)" }, 0,
+        juce::StringArray { "Short (3 s)", "Fast" }, 1,
         juce::AudioParameterChoiceAttributes().withAutomatable (false));
     layout.add (std::move (response));
 
@@ -302,18 +305,22 @@ void MakeGainProcessor::setStateInformation (const void* data, int sizeInBytes)
 void MakeGainProcessor::crossParameters()
 {
     machine->set_engaged (activeParam->load() > 0.5f);
-    machine->set_metric (metricParam->load() > 0.5f
-                             ? makegain::dsp::GainMetric::db_rms
-                             : makegain::dsp::GainMetric::lufs);
+    // A3 stage-3: freeze (FR-24), metering HP (FR-26). The engine's
+    // setters are change-guarded, so the per-block fan-out is two writes
+    // at steady state. Both are UI-only parameters.
+    //
+    // Freeze is applied BEFORE the mode: set_mode refuses a switch while
+    // frozen (FR-30), so this order keeps a frozen session honest even
+    // when the Response parameter moved (or was restored from a blob).
+    machine->set_frozen (freezeParam->load() > 0.5f);
+    // M3b: the Response switch is the mode selector until C8 replaces the
+    // panel — Short = Smooth (3 s LUFS), Fast = Fast level. The Metric
+    // parameter stays bound for the current editor but is ignored here.
+    machine->set_mode (responseParam->load() > 0.5f
+                           ? makegain::dsp::GainMode::fast
+                           : makegain::dsp::GainMode::smooth);
     machine->set_max_comp_db ((double) maxcompParam->load());
     machine->set_ramp_tc ((double) ramptcParam->load());
-    // A3 stage-3: response (FR-23), freeze (FR-24), metering HP (FR-26).
-    // The engine's setters are change-guarded, so the per-block fan-out
-    // is two writes at steady state. All three are UI-only parameters;
-    // AudioParameterChoice's raw value is the SELECTION INDEX as a float.
-    machine->set_meter_window (responseParam->load() > 0.5f ? 0.4
-                         : makegain::dsp::GainComputer::kMeterWindowSec);
-    machine->set_frozen (freezeParam->load() > 0.5f);
     machine->set_meter_hp (mtrhpParam->load() > 0.5f,
                            (double) mtrhphzParam->load());
 }
