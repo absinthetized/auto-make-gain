@@ -164,19 +164,22 @@ void MakeGainEditor::MainPanel::refresh()
         : "chain delta - no full window yet";
     deltaCaption = smooth ? "CHAIN DELTA (LUFS)" : "CHAIN DELTA (LEVEL)";
 
-    // C8 (FR-12): band and span of the detector actually in use. In Fast
-    // the band is the FR-29 corner — the user's Meter HP corner when that
-    // sits above 80 Hz, otherwise the 80 Hz floor (applied even with the
-    // HP off). Smooth is K-weighted with no floor.
+    // C8 (FR-12/FR-26): the band label is the metering high-pass corner
+    // actually in force, in BOTH modes (owner, 2026-11-25: the Smooth
+    // reading must not lose the HP information — the pill and the LUFS
+    // caption already say which detector is running). Fast adds the
+    // FR-29 floor: the corner is max(user corner, 80 Hz), and 80 Hz
+    // applies even with the HP off. Smooth has no floor, so an off HP
+    // means no band limit.
+    const float hz = processorRef.getApvts()
+                         .getRawParameterValue ("mtrhphz")->load();
     if (smooth)
     {
         spanText = "3 s";
-        bandText = "K-weighted";
+        bandText = hpOn ? juce::String (juce::roundToInt (hz)) + " Hz" : "off";
     }
     else
     {
-        const float hz = processorRef.getApvts()
-                             .getRawParameterValue ("mtrhphz")->load();
         spanText = "15 ms";
         bandText = juce::String (juce::roundToInt (hpOn ? juce::jmax (hz, 80.0f)
                                                        : 80.0f)) + " Hz";
