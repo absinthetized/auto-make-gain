@@ -29,6 +29,13 @@
    GitHub Actions matrix, packaging (signed macOS artifacts),
    dependency-audit tooling (syft/grype), and the rule-12 snapshot
    doc-lint automation (plus running the version gate on tag pushes).
+   - **Compiler warning flags** (owner, 2026-11-25): turn on
+     `-Wall -Wextra` (then `-Werror` once clean) for the build targets.
+     Origin: the C5 RED commit carried a dead static helper that built
+     silently — the repo has no warning flags at all, so `-Werror` was
+     never in play. Treat as build hygiene, reviewed on its own; the
+     owner judged it a separate activity from the M3 work, not a C5
+     fix-up.
 
 ## Open loose ends (not new work)
 
