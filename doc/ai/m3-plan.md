@@ -129,9 +129,9 @@ commit keeps the eyeball gate.
 | C2 | M3a | this plan; `decisions.md` rows; `backlog.md` M3 status | docs | owner reads text |
 | C3 | M3a `pr-m3a-fast-level` | **RED**: `tests/dsp/fast_level_test.cpp` + honest stub `src/dsp/fast_level.h` + CMake test wiring; failing output quoted | source | eyeball + failing log |
 | C4 | M3a | **GREEN**: `src/dsp/fast_level.cpp` | source | eyeball + green log |
-| C5 | M3b `pr-m3b-mode-engine` | **RED**: `tests/dsp/gain_computer_test.cpp` additions (R-G1..R-G6) + stub changes; failing output quoted | source | eyeball + failing log |
+| C5 | M3b `pr-m3b-mode-engine` | **RED**: `tests/dsp/gain_computer_test.cpp` additions (R-G1..R-G8) + honest stub, legacy cases re-pinned to Smooth; failing output quoted | source | eyeball + failing log |
 | C6 | M3b | **GREEN**: `src/dsp/gain_computer.{h,cpp}` (mode, grid, floor, time-based silence) | source | eyeball + green log |
-| C7 | M3b | **GREEN**: `src/plugin/MakeGainProcessor.{h,cpp}` (`mode` param, wiring, legacy migration) | source | eyeball + green log |
+| C7 | M3b | **GREEN**: `src/plugin/MakeGainProcessor.{h,cpp}` (`mode` param, wiring, legacy migration) + delete the interim engine shim | source | eyeball + green log |
 | C8 | M3c `pr-m3c-ui-docs` | UI iteration: one Mode pill, span caption in the freed flank, freeze lock, delta captions | source | owner eyeball on host **before** commit |
 | C9 | M3c | Human docs: `usage.md` panel table + detector band, `code-tour.md` file map, `CHANGELOG.md` Unreleased | docs | owner reads text |
 
@@ -150,6 +150,25 @@ All inside the AGENTS.md reference metrics.
   gain on either grid; 4.9 s does not.
 - **R-G5** Chunk invariance holds on the 5 ms grid (R-D8 analogue).
 - **R-G6** Identical taps give an exact 0 dB delta on both paths.
+- **R-G7** Mode change refused while frozen (FR-30): the mode holds, the
+  gain holds, and the switch works again after release.
+- **R-G8** Legacy shim: default mode is Fast, `set_metric(LUFS)` →
+  Smooth, `set_metric(dB RMS)` → Fast, `set_meter_window` is a no-op.
+
+R-D4 (metric pairing) retires into R-G3; R-F3/R-F4 (Response window)
+into R-G1/R-G3. Every legacy A2/A3 case explicitly pins **Smooth**, so
+it keeps pinning today's stage across the default flip to Fast.
+
+### M3b rulings
+
+- Interim shim (owner, 2026-11-25): the panel's Metric switch drives the
+  Mode for this PR only (`LUFS → Smooth`, `dB RMS → Fast`); Response is
+  ignored. `set_metric` / `set_meter_window` live in the engine as
+  shims until C7 removes them with the processor rewrite.
+- RED-gap note: at the stub's fixed 100 ms grid, R-G4/R-G6/R-G8 pass by
+  construction — they guard the C6 grid change, not the stub's absence
+  of it. Stated in the C5 message rather than hidden.
+
 
 ## Open / deferred
 
