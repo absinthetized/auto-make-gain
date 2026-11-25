@@ -52,6 +52,23 @@
      separate source lists, so the test lane cannot catch a missing
      plugin source.
 
+3. **Three-stage workflow — Fast, then Smooth, then Freeze** (owner,
+   2026-11-25). A use case discovered in real use, queued as a
+   *candidate*, not an order:
+   - build and adjust the chain in **Fast** (the reading moves in tens
+     of milliseconds, so edits are audible immediately);
+   - once the chain stabilises, switch to **Smooth** — slower, but the
+     LUFS reading is the ear-accurate one;
+   - when happy, **Freeze** once and leave it as a static trimmer.
+
+   The sequence is already allowed (FR-28 switching while not frozen,
+   FR-30 locking it while frozen), but the panel does not *suggest* it:
+   Mode sits in a flank and Freeze in the bottom strip, so nothing reads
+   as a progression. A layout pass that expresses the three stages is
+   queued **if the workflow proves ingrained** (owner: wants to use it
+   more before redesigning). Doc side: `usage.md` should state the
+   workflow as a recommended path.
+
 ## Open loose ends (not new work)
 
 - Tier-2 Asahi session: ~~`gcc --version` skew-guard close-out~~ —
