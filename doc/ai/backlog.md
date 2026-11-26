@@ -15,17 +15,16 @@
 - **M2 — toolchain maintenance (Fedora 45 + JUCE 9.0.5)** — merged as
   `Pr m2c juce9 (#14)`; both Docker lanes green. Owner gate closed
   2026-11-23 (below). Evidence: m2-plan §M2b/§M2c.
+- **M3 — faster / more real-time compensation** — merged as
+  `pr-m3c-ui-docs`, version 0.3.0: two compensation modes (Fast level /
+  Smooth LUFS) behind one Mode control, the 80 Hz Fast band floor, the
+  panel's band/span caption, and the session migration from the retired
+  Metric/Response parameters. Bare-metal Asahi run accepted by the owner
+  2026-11-26. Evidence and rulings: `m3-plan.md`.
 
 ## Queued items (in order)
 
-1. **M3 — faster / more real-time compensation** — owner, 2026-11-21.
-   **In progress** (started 2026-11-24 on `pr-m3a-fast-level`): scope,
-   rulings, contract delta and the commit breakdown live in
-   `m3-plan.md`. Two modes (Fast level / Smooth LUFS), a fixed 80 Hz
-   floor in the Fast detector, and the Mode switch replacing the Metric
-   and Response switches.
-
-2. **M4 — CI/CD + release process** — queued last (owner 2026-11-11):
+1. **M4 — CI/CD + release process** — queued last (owner 2026-11-11):
    GitHub Actions matrix, packaging (signed macOS artifacts),
    dependency-audit tooling (syft/grype), and the rule-12 snapshot
    doc-lint automation (plus running the version gate on tag pushes).
@@ -62,7 +61,7 @@
        build the default all-target, or `MakeGain_All` + `MakeGain_CLAP`
        explicitly.
 
-3. **Three-stage workflow — Fast, then Smooth, then Freeze** (owner,
+2. **Three-stage workflow — Fast, then Smooth, then Freeze** (owner,
    2026-11-25). A use case discovered in real use, queued as a
    *candidate*, not an order:
    - build and adjust the chain in **Fast** (the reading moves in tens
@@ -76,7 +75,7 @@
    Mode sits in a flank and Freeze in the bottom strip, so nothing reads
    as a progression. A layout pass that expresses the three stages is
    queued **if the workflow proves ingrained** (owner: wants to use it
-   more before redesigning). Doc side: `usage.md` should state the
+   more before redesigning). Doc side is done: `usage.md` states the
    workflow as a recommended path.
 
 ## Open loose ends (not new work)
@@ -85,9 +84,9 @@
   **closed 2026-11-21** (16.2.1 both sides, host packaging newer; see
   m2-plan §M2b); ~~Ardour/CLAP load on the JUCE 9 binaries~~ —
   **closed 2026-11-23, fully green** (m2-plan §M2c). Nothing left on M2.
-- Pen payload refresh: `~/Desktop/makegain-linux-arts-55f2909/` holds
-  JUCE-9.0.5-verified aarch64 VST3 + CLAP + JSFX TAP scripts, copied
-  from the M2c lane artifacts.
+- Pen payload: `~/Desktop/makegain-linux-arts-b589b9b/` holds the 0.3.0
+  aarch64 VST3 + CLAP + JSFX TAP scripts, staged from the M3c lane at
+  that commit (stamped, sha-named, MANIFEST + SHA256SUMS).
 - Fast vs Smooth on program material: the M3b acceptance is perceptual
   (2026-11-25); R-G1/R-G2 measure convergence on synthetic signals
   only. A rendered comparison would make the host verdict checkable.
