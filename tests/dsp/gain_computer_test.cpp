@@ -269,7 +269,6 @@ TEST_CASE("gain computer: clamp at MaxComp with the flag (R-D5)") {
 // disengage; the per-sample step bound is never exceeded.
 // ---------------------------------------------------------------------------
 TEST_CASE("gain computer: ramp properties on engage/disengage (R-D6)") {
-  const std::size_t settle = seconds(3.5);
   const auto dry = sine_1k(0.0, seconds(9.5));    // −3.0 LUFS
   const auto wet = sine_1k(-6.0, seconds(9.5));   // −9.0 ⇒ target +6
 
