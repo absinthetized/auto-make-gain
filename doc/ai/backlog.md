@@ -78,6 +78,43 @@
    more before redesigning). Doc side is done: `usage.md` states the
    workflow as a recommended path.
 
+3. **Artifact stamp vs HEAD — the chicken-and-egg** (owner, 2026-11-26).
+   `stage-linux-artifacts.sh` requires the binary's compiled stamp to
+   equal `git rev-parse --short HEAD`. But the lane runs and then the
+   branch takes ledger/doc commits, and the merge adds a commit of its
+   own — HEAD moves while the compiled code does not. Observed at M3c:
+   the lanes ran and the payload was staged at `b589b9b`; the ledger
+   close-out `4d61efb` then made that payload "stale" by identity, and
+   the merge commit would break it a second time.
+
+   Proposed rule (to be ruled on): verify **build inputs**, not commit
+   identity. Two halves:
+   - *Staging check*: accept a stamp that is an ancestor of HEAD with no
+     diff in the files that feed the binary (`src/`, `CMakeLists.txt`,
+     `cmake/`, `CMakePresets.json`, and `jsfx/` because it is copied into
+     the payload); when refusing, name the offending paths.
+   - *Checkout-independent stamp*: a commit sha can only certify a build
+     to the person who built it — anyone rebuilding from `main`, a tag
+     or a tarball has a different HEAD and a different sha, so the
+     comparison cannot be reproduced (owner, 2026-11-26). Embed a
+     **build-input digest** as well: sha256 over
+     `git ls-files -s -- src CMakeLists.txt cmake CMakePresets.json jsfx`
+     (index form, so it follows the working tree, not HEAD). The digest
+     is stable across ledger/doc commits, merge commits and third-party
+     rebuilds, and anyone can recompute it from any checkout and compare
+     it with the released binary. Keep the sha in the GUI stamp (short,
+     human-facing); embed the digest as its own string for verification.
+
+   `MANIFEST.txt` records the build commit, the staging commit and the
+   input digest, with the exact command to recompute it; the on-target
+   check compares digests.
+
+   Why it matters: without this, a milestone either restages the whole
+   lane after every doc commit or ships a payload whose stamp cannot
+   match the PR head — the situation rule 13 was written to prevent.
+   M4's CI work touches the same script, so the fix can ride there or
+   land as its own small PR after M3c.
+
 ## Open loose ends (not new work)
 
 - Tier-2 Asahi session: ~~`gcc --version` skew-guard close-out~~ —
