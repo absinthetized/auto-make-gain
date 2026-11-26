@@ -321,8 +321,10 @@ TEST_CASE("gain computer: silence holds and flags report taps (R-D7)") {
     const auto dry = sine_1k(0.0, settle + seconds(2.2));
 
     // Short silence first: below the 5 s streak, flag must stay dark.
+    const std::size_t gap_n = seconds(2.2);
     std::vector<float> wet = sine_1k(-6.0, settle);
-    { const auto gap = digital_silence(seconds(2.2));
+    wet.reserve(settle + gap_n);
+    { const auto gap = digital_silence(gap_n);
       wet.insert(wet.end(), gap.begin(), gap.end()); }
     dsp::GainComputer g = smooth_engine();
     g.set_engaged(true);
@@ -396,6 +398,7 @@ TEST_CASE("gain computer: chunk invariance of the emitted trajectory (R-D8)") {
   const std::size_t n = a + gap_n + back_n;
   std::vector<float> dry = sine_1k(0.0, n);
   std::vector<float> wet = sine_1k(-6.0, a);
+  wet.reserve(n);
   { const auto gap = digital_silence(gap_n); wet.insert(wet.end(), gap.begin(), gap.end()); }
   { const auto back = sine_1k(-6.0, back_n); wet.insert(wet.end(), back.begin(), back.end()); }
 
