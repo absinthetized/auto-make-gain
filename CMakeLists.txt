@@ -178,3 +178,24 @@ if(MAKEGAIN_SANITIZERS)
   target_link_options(makegain_tests PRIVATE
     -fsanitize=address,undefined)
 endif()
+
+# --- compiler warnings ------------------------------------------------------
+# The build previously passed no warning flags, so a dead static helper
+# compiled silently. Flags are set per source file, not per target: JUCE
+# module sources compile inside the consuming target
+# (CMakeFiles/MakeGain.dir/_deps/...), so a target-level -Werror promotes
+# GCC's warnings in JUCE's bundled opus code to build errors. Only paths
+# under src/ and tests/ belong to this repo; dependency sources arrive as
+# absolute paths under the build directory.
+set(MAKEGAIN_WARNING_FLAGS -Wall -Wextra -Werror)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  foreach(_target MakeGain makegain_tests)
+    get_target_property(_sources ${_target} SOURCES)
+    foreach(_src IN LISTS _sources)
+      if(_src MATCHES "^(src|tests)/")
+        set_property(SOURCE ${_src} APPEND PROPERTY COMPILE_OPTIONS
+          ${MAKEGAIN_WARNING_FLAGS})
+      endif()
+    endforeach()
+  endforeach()
+endif()
