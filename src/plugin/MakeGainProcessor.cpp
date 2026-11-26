@@ -29,18 +29,18 @@ MakeGainProcessor::MakeGainProcessor()
     activeParam = apvts.getRawParameterValue ("active");
     maxcompParam = apvts.getRawParameterValue ("maxcomp");
     ramptcParam  = apvts.getRawParameterValue ("ramptc");
-    responseParam = apvts.getRawParameterValue ("response");
+    modeParam     = apvts.getRawParameterValue ("mode");
     freezeParam   = apvts.getRawParameterValue ("freeze");
     mtrhpParam    = apvts.getRawParameterValue ("mtrhp");
     mtrhphzParam  = apvts.getRawParameterValue ("mtrhphz");
     zoomParam     = apvts.getRawParameterValue ("zoom");
 }
 
-// Parameter layout (PR-B3, stage 2). UX-Q4 stands: Active is the ONLY
-// automatable parameter; Metric / MaxComp / Ramp are UI-only toggles
-// (setIsAutomatable(false)) — they still persist with the session via
-// the APVTS (FR-22, A2-narrowed: parameters only). Defaults: LUFS,
-// MaxComp 16 dB (A2 default, range 0–48), ramp 300 ms (FR-5).
+// Parameter layout (PR-B3, stage 2). FR-15 stands: Active is the ONLY
+// automatable parameter; Mode / MaxComp / Ramp / Freeze / Meter HP / Zoom
+// are UI-only (setIsAutomatable(false)) — they still persist with the
+// session via the APVTS (FR-22, A2-narrowed: parameters only). Defaults:
+// Mode Fast, MaxComp 16 dB (A2 default, range 0–48), ramp 300 ms (FR-5).
 juce::AudioProcessorValueTreeState::ParameterLayout
 MakeGainProcessor::createParameterLayout()
 {
@@ -52,11 +52,16 @@ MakeGainProcessor::createParameterLayout()
     layout.add (std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "active", 1 }, "Active", false));
 
-    auto metric = std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { "metric", 1 }, "Metric",
-        juce::StringArray { "LUFS (K-weighted)", "dB RMS (unweighted)" }, 0,
+    // C8 (FR-28): the ONE detector selector. Choice 0 = Fast (broadband
+    // level, 15 ms span, default), 1 = Smooth (BS.1770 short-term
+    // loudness, 3 s). The retired Metric switch and the interim Response
+    // selector are gone: the metric follows the mode, so there is nothing
+    // independent left to choose.
+    auto mode = std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "mode", 1 }, "Mode",
+        juce::StringArray { "Fast", "Smooth" }, 0,
         juce::AudioParameterChoiceAttributes().withAutomatable (false));
-    layout.add (std::move (metric));
+    layout.add (std::move (mode));
 
     auto maxcomp = std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "maxcomp", 1 }, "MaxComp",
@@ -70,16 +75,6 @@ MakeGainProcessor::createParameterLayout()
         (float) makegain::dsp::GainComputer::kDefaultRampTcSec,
         juce::AudioParameterFloatAttributes().withAutomatable (false));
     layout.add (std::move (ramptc));
-
-    // M3b: this switch selects the compensation MODE until C8 replaces the
-    // panel. Short maps to Smooth (3 s LUFS), Fast to the Fast level
-    // detector; the default is Fast (FR-28). The old "0.4 s" label is
-    // stale and is retired with the panel.
-    auto response = std::make_unique<juce::AudioParameterChoice> (
-        juce::ParameterID { "response", 1 }, "Response",
-        juce::StringArray { "Short (3 s)", "Fast" }, 1,
-        juce::AudioParameterChoiceAttributes().withAutomatable (false));
-    layout.add (std::move (response));
 
     auto freeze = std::make_unique<juce::AudioParameterBool> (
         juce::ParameterID { "freeze", 1 }, "Freeze", false,
@@ -287,8 +282,48 @@ void MakeGainProcessor::setStateInformation (const void* data, int sizeInBytes)
     // All-or-nothing: a broken/unrecognized blob must leave the CURRENT
     // state untouched, so validate BEFORE replacing.
     auto restored = juce::ValueTree::fromXml (*xml);
-    if (restored.isValid())
-        apvts.replaceState (restored);
+    if (! restored.isValid())
+        return;
+
+    // C8 (FR-28): legacy sessions are migrated on the way in, so neither
+    // the engine nor the panel ever sees a pre-C8 tree.
+    migrateLegacyMode (restored);
+
+    apvts.replaceState (restored);
+}
+
+// C8 migration (FR-28, persistence clause). A pre-C8 session stores the
+// detector in the retired `metric` choice (0 = LUFS, 1 = dB RMS) and the
+// retired `response` switch; a C8 session stores `mode` (0 = Fast,
+// 1 = Smooth). The mapping keeps what the session was actually hearing:
+// LUFS was the Smooth detector, dB RMS the Fast level detector.
+//
+// In framework terms: APVTS serializes every parameter as a child node
+// named by its ID, with the value in a `value` property — replaceState
+// reads exactly that, so a plain child append is a valid migration.
+// Parameters present in the layout but missing from the tree keep their
+// current value; children with no matching parameter are simply carried
+// along (and would be re-saved), which is why they are removed here.
+void MakeGainProcessor::migrateLegacyMode (juce::ValueTree& state)
+{
+    if (! state.getChildWithName ("mode").isValid())
+    {
+        const auto metric = state.getChildWithName ("metric");
+        const bool rms = metric.isValid()
+                      && (double) metric.getProperty ("value", 0.0) > 0.5;
+
+        juce::ValueTree modeNode { "mode" };
+        modeNode.setProperty ("value", rms ? 0 : 1, nullptr);
+        state.appendChild (modeNode, nullptr);
+    }
+
+    // Retired children would otherwise ride into every future save.
+    for (const auto* retired : { "metric", "response" })
+    {
+        const auto child = state.getChildWithName (retired);
+        if (child.isValid())
+            state.removeChild (child, nullptr);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -311,14 +346,13 @@ void MakeGainProcessor::crossParameters()
     //
     // Freeze is applied BEFORE the mode: set_mode refuses a switch while
     // frozen (FR-30), so this order keeps a frozen session honest even
-    // when the Response parameter moved (or was restored from a blob).
+    // when the Mode parameter moved (or was restored from a blob).
     machine->set_frozen (freezeParam->load() > 0.5f);
-    // M3b: the Response switch is the mode selector until C8 replaces the
-    // panel — Short = Smooth (3 s LUFS), Fast = Fast level. The Metric
-    // parameter stays bound for the current editor but is ignored here.
-    machine->set_mode (responseParam->load() > 0.5f
-                           ? makegain::dsp::GainMode::fast
-                           : makegain::dsp::GainMode::smooth);
+    // C8 (FR-28): the Mode parameter is the single detector selector —
+    // 0 = Fast (broadband level), 1 = Smooth (BS.1770 short-term).
+    machine->set_mode (modeParam->load() > 0.5f
+                           ? makegain::dsp::GainMode::smooth
+                           : makegain::dsp::GainMode::fast);
     machine->set_max_comp_db ((double) maxcompParam->load());
     machine->set_ramp_tc ((double) ramptcParam->load());
     machine->set_meter_hp (mtrhpParam->load() > 0.5f,

@@ -138,10 +138,14 @@ commit keeps the eyeball gate.
 Sizing: 9 commits; source files per PR — M3a 3 (+CMake), M3b 5, M3c 2.
 All inside the AGENTS.md reference metrics.
 
-**Status**: C5–C7 are on `pr-m3b-mode-engine`, plus a build fix
-(`d9d5ae5`: `fast_level.cpp` was missing from the plugin target) and the
-ledger updates. The owner host-accepted M3b at `d9d5ae5` — verdict is
-perceptual (see `decisions.md`). C8/C9 open.
+**Status**: C5–C7 are on `pr-m3b-mode-engine` (merged as PR #20), plus a
+build fix (`d9d5ae5`: `fast_level.cpp` was missing from the plugin
+target) and the ledger updates. The owner host-accepted M3b at `d9d5ae5`
+— verdict is perceptual (see `decisions.md`). C8 and C9 landed on
+`pr-m3c-ui-docs`, plus one C8 follow-up fix (the band label keeps the HP
+corner in Smooth; the detector name is already on screen), and the
+version bumped to 0.3.0. The bare-metal Asahi run at `b589b9b` was
+accepted by the owner 2026-11-26; merge and tag are the owner's cut.
 
 ## Proposed test IDs (RED commits)
 
@@ -185,3 +189,10 @@ it keeps pinning today's stage across the default flip to Fast.
 - Least-squares gain estimator on the Fast path.
 - Whether the freed right flank keeps the span caption permanently.
 - Per-mode stored HP default (rejected for now: one value, default OFF).
+- Felt speed in Fast is set by `Ramp tc`, not by the detector: measured
+  on the engine, a 6 dB chain edit reaches 90 % at ~143 ms with the
+  50 ms default and ~61 ms at the 10 ms floor (the 15 ms follower is
+  done in ~75 ms). The owner's session carried a persisted 1 s ramp,
+  which made Fast feel like Smooth; no default change was made (the
+  default is already 50 ms). A per-mode ramp default stays an option if
+  Fast ever feels soft at 50 ms.
