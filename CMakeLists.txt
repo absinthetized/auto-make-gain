@@ -178,3 +178,15 @@ if(MAKEGAIN_SANITIZERS)
   target_link_options(makegain_tests PRIVATE
     -fsanitize=address,undefined)
 endif()
+
+# --- compiler warnings ------------------------------------------------------
+# The build previously passed no warning flags, so a dead static helper
+# compiled silently. Applied to the repo's own targets only: JUCE,
+# clap-juce-extensions and Catch2 are separate targets, and third-party
+# warnings are not ours to fix. GCC and Clang share these flags; MSVC is
+# not a target platform (README: macOS + Linux).
+set(MAKEGAIN_WARNING_FLAGS -Wall -Wextra)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(MakeGain PRIVATE ${MAKEGAIN_WARNING_FLAGS})
+  target_compile_options(makegain_tests PRIVATE ${MAKEGAIN_WARNING_FLAGS})
+endif()
