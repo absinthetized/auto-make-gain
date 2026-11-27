@@ -2,6 +2,9 @@
 
 Binding for any AI/agent working in this repository:
 
+Toolchain profile: cmake-ninja (declared in
+~/.config/opencode/toolchains/cmake-ninja/)
+
 1. **No commits without an explicit order from the owner.** Editing files is
    fine; `git commit` only when the owner says so (in their message, not
    implied).
@@ -166,3 +169,9 @@ Binding for any AI/agent working in this repository:
    Session unit is one task, ended at a commit boundary. Conflict rule:
    if an efficiency default ever conflicts with a gate above, the gate
    wins — say so in one line and continue.
+15. **Build/test output** (owner, 2026-11-27): build and test output is
+   read from the one-line summary produced by `check-all.sh` or
+   `docker-check.sh`; the full log is opened only for the failing
+   step. Logs are overwritten each run at `build/<preset>/logs/`. The
+   `-v` flag streams live output while still logging. This extends
+   rule 14 (check economy).

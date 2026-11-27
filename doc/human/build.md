@@ -58,9 +58,13 @@ clap-juce-extensions, Catch2 v3.16.1 — pins live in
 
 ```sh
 ./scripts/check-all.sh        # default + ASan/UBSan lane, ctest both
+./scripts/check-all.sh -v     # streams output live while still logging
 ```
 
-Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
+Logs are captured to `build/<preset>/logs/<step>.log` (git-ignored).
+Each step prints one summary line (`OK [preset] step`); on failure
+the last 60 lines of the log are shown with the log path.
+`-v` streams output live. Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
 plugin artifacts are always sanitizer-free.
 
 The **version gate** (`scripts/check-version.sh`) compares the version in
