@@ -2,6 +2,9 @@
 
 Binding for any AI/agent working in this repository:
 
+Toolchain profile: cmake-ninja (declared in
+~/.config/opencode/toolchains/cmake-ninja/)
+
 1. **No commits without an explicit order from the owner.** Editing files is
    fine; `git commit` only when the owner says so (in their message, not
    implied).
@@ -19,6 +22,10 @@ Binding for any AI/agent working in this repository:
    - when starting an implementation phase, the assistant first proposes a
      **commit-breakdown plan** (per-commit contents + checkpoints) as part
      of the implementation plan, and the owner agrees on it *before* coding;
+     the plan names the **branch** the unit lands on and its base commit
+     (e.g. `m4-quiet-output` from `main@8d3a558`), per the naming in
+     `doc/ai/release-model.md` — a plan without a branch line is
+     incomplete;
    - commit messages set out *what and why* in the subject, details in the
      body when needed.
    - **Commit cadence (owner, 2026-10-18; amended twice — read BOTH):**
@@ -61,7 +68,12 @@ Binding for any AI/agent working in this repository:
      *where* a commit lands. Origin of the rule: five PR-B commits landed
      on an unverified `main` during the 2026-10-20 tag ceremony; the owner
      accepted them as-is (no rewrite, no retroactive PR) and ordered this
-     check formalized.
+     check formalized. **Verification acts (owner, 2026-11-27):** when the
+     unit of work has no branch yet, the answer "we are on `main`" means
+     *create it* — the agent runs `git switch -c <planned-name>` from the
+     plan's base **before editing any source file**, not merely before
+     committing. Origin: M4 work sat uncommitted on `main` (the plan named
+     no branch) until the per-commit gate caught it at the commit.
 7. **Comment standard (owner, 2026-10-17):** code must carry enough
    comments for a reader with **limited framework knowledge** (decent C++
    but *not* JUCE) to follow the process. Concretely, in addition to
@@ -81,7 +93,12 @@ Binding for any AI/agent working in this repository:
      unsustainable): at a milestone's merge the file map and the
      entry-point chain must not be stale.
 8. **Red/green testing discipline (owner, 2026-10-18):** no
-   implementation may exist before its tests. Every test-covered unit
+   implementation may exist before its tests. **Scope (owner,
+   2026-11-27):** application code only — the discipline exists to raise
+   the quality of the plugin. Shell scripts, utilities and build/test
+   tooling are not test-covered units; they are verified by a documented
+   checkpoint (the command run and its output quoted in the commit
+   message). Every test-covered unit
    lands in two commits: a **RED** commit (tests + an honest stub that
    compiles but obviously cannot satisfy them; the failing checkpoint
    output is quoted in the message) and a **GREEN** commit (the real
@@ -152,3 +169,9 @@ Binding for any AI/agent working in this repository:
    Session unit is one task, ended at a commit boundary. Conflict rule:
    if an efficiency default ever conflicts with a gate above, the gate
    wins — say so in one line and continue.
+15. **Build/test output** (owner, 2026-11-27): build and test output is
+   read from the one-line summary produced by `check-all.sh` or
+   `docker-check.sh`; the full log is opened only for the failing
+   step. Logs are overwritten each run at `build/<preset>/logs/`. The
+   `-v` flag streams live output while still logging. This extends
+   rule 14 (check economy).

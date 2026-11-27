@@ -58,9 +58,13 @@ clap-juce-extensions, Catch2 v3.16.1 — pins live in
 
 ```sh
 ./scripts/check-all.sh        # default + ASan/UBSan lane, ctest both
+./scripts/check-all.sh -v     # streams output live while still logging
 ```
 
-Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
+Logs are captured to `build/<preset>/logs/<step>.log` (git-ignored).
+Each step prints one summary line (`OK [preset] step`); on failure
+the last 60 lines of the log are shown with the log path.
+`-v` streams output live. Sanitizers exist **only** in the test lane (a deliberate decision, TS §7) —
 plugin artifacts are always sanitizer-free.
 
 The **version gate** (`scripts/check-version.sh`) compares the version in
@@ -190,14 +194,20 @@ one compares `gcc --version` inside the container vs. on the Asahi box.
 **Committed lane:**
 
 ```sh
-scripts/docker-check.sh         # arm64 native lane
+scripts/docker-check.sh         # arm64 native lane (quiet, one line per lane)
+scripts/docker-check.sh -v      # streams output live while still logging
 scripts/docker-check.sh --x64   # amd64 under Rosetta (§8.2)
+scripts/docker-check.sh -v --x64 # verbose amd64 lane
 ```
 
 `docker/fedora-dev.Dockerfile` provisions the image (same dnf package
 list as `scripts/bootstrap.sh`). Sanitizer presets run through the same
-wrapper (`§3`). What the container can never answer: *does the plugin
-load and behave inside a real DAW* — that stays Tier 2, by design.
+wrapper (`§3`). Both the image build and the in-container steps follow
+the `§3` output contract: logs under `build/<lane>/logs/`
+(`docker-arm64` / `docker-x64` for the image build), one summary line
+each, the failing tail on failure. What the container can never answer:
+*does the plugin load and behave inside a real DAW* — that stays Tier 2,
+by design.
 
 ### 8.1 Artifact transfer lane (container → pen → bare metal)
 
