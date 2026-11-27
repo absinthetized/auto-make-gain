@@ -46,13 +46,11 @@ case "${1:-}" in
   "")
     PLATFORM=""
     IMAGE=makegain-fedora-dev:latest
-    PRESETS="linux-arm64 linux-arm64-sanitize"
     ARCH_LABEL="arm64 (native in Docker Desktop's Linux VM)"
     ;;
   --x64)
     PLATFORM="linux/amd64"
     IMAGE=makegain-fedora-dev:x64
-    PRESETS="linux-x64 linux-x64-sanitize"
     ARCH_LABEL="amd64 (Rosetta-emulated)"
     ;;
   *)
@@ -81,21 +79,13 @@ fi
 echo "==> [1/2] building image (layer-cached; slow only on first provisioning)"
 docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile .
 
-for preset in $PRESETS; do
-  echo "==> [2/2] lane: ${preset}"
-  # The preset name is interpolated by the OUTER shell (local variable),
-  # then the whole block runs inside the container with bash -u -e.
-  docker run --rm --tty $RUN_FLAGS \
-    --volume "$ROOT":/work --workdir /work \
-    "$IMAGE" bash -uec "
-      echo \"--- configure: ${preset}\"
-      cmake --preset ${preset}
-      echo \"--- build: ${preset}\"
-      cmake --build build/${preset}
-      echo \"--- ctest: ${preset}\"
-      ctest --test-dir build/${preset} --output-on-failure
-    "
-done
+# Run check-all.sh inside the container. It auto-detects the correct presets
+# from uname, so we don't pass individual preset names — the lane label
+# identifies the architecture.
+echo "==> [2/2] lane: ${ARCH_LABEL}"
+docker run --rm --tty $RUN_FLAGS \
+  --volume "$ROOT":/work --workdir /work \
+  "$IMAGE" bash -euc "scripts/check-all.sh"
 
 echo
 echo "ALL GREEN — Linux ${ARCH_LABEL} configure+build+ctest passed in-container."
