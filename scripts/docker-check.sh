@@ -14,6 +14,8 @@
 #   scripts/docker-check.sh          # native arm64 lane (default)
 #   scripts/docker-check.sh --x64    # amd64 lane, Rosetta-emulated on the
 #                                    # Apple Silicon mac (doc/human/build.md §8.2)
+#   scripts/docker-check.sh -v       # streams output live while still logging
+#   scripts/docker-check.sh -v --x64 # verbose amd64 lane
 #
 # Idempotent: `docker build` below is layer-cached — after the first
 # provisioning run it costs ~1 second unless scripts/bootstrap.sh changed.
@@ -40,23 +42,26 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # repo root, script-location independent
 
-# Lane selection. Plain string flags (no arrays) so the script also runs
-# under macOS's stock bash 3.2, where empty-array expansion trips `set -u`.
-case "${1:-}" in
-  "")
-    PLATFORM=""
-    IMAGE=makegain-fedora-dev:latest
-    ARCH_LABEL="arm64 (native in Docker Desktop's Linux VM)"
-    ;;
-  --x64)
-    PLATFORM="linux/amd64"
-    IMAGE=makegain-fedora-dev:x64
-    ARCH_LABEL="amd64 (Rosetta-emulated)"
-    ;;
-  *)
-    echo "usage: $0 [--x64]" >&2
-    exit 2
-    ;;
+# Single parse loop: -v, --x64, both (any order), empty, or bad flag.
+# No arrays so bash 3.2 is still happy.
+LANE=""
+stream=0
+for arg in "$@"; do
+  case "$arg" in
+    -v)     stream=1 ;;
+    --x64)  LANE="--x64" ;;
+    *)      echo "usage: $0 [-v] [--x64]" >&2; exit 2 ;;
+  esac
+done
+
+# Lane selection from parsed flags.
+PLATFORM=""
+IMAGE=makegain-fedora-dev:latest
+ARCH_LABEL="arm64 (native in Docker Desktop's Linux VM)"
+case "$LANE" in
+  "")     ;;
+  --x64)  PLATFORM="linux/amd64"; IMAGE=makegain-fedora-dev:x64
+          ARCH_LABEL="amd64 (Rosetta-emulated)" ;;
 esac
 
 cd "$ROOT"
@@ -81,11 +86,17 @@ docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile .
 
 # Run check-all.sh inside the container. It auto-detects the correct presets
 # from uname, so we don't pass individual preset names — the lane label
-# identifies the architecture.
-echo "==> [2/2] lane: ${ARCH_LABEL}"
+# identifies the architecture. VERBOSE is empty or -v; safe to expand directly.
+if [[ "$stream" -eq 1 ]]; then
+  echo "==> [2/2] lane: ${ARCH_LABEL} (verbose)"
+else
+  echo "==> [2/2] lane: ${ARCH_LABEL}"
+fi
+VERBOSE=""
+[[ "$stream" -eq 1 ]] && VERBOSE="-v"
 docker run --rm --tty $RUN_FLAGS \
   --volume "$ROOT":/work --workdir /work \
-  "$IMAGE" bash -euc "scripts/check-all.sh"
+  "$IMAGE" bash -euc "scripts/check-all.sh ${VERBOSE}"
 
 echo
 echo "ALL GREEN — Linux ${ARCH_LABEL} configure+build+ctest passed in-container."

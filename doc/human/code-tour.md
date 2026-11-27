@@ -45,7 +45,7 @@ the *same* compiled processor — that's the whole multi-format payoff.
 | `tests/dsp/` | The lab: JUCE-free Catch2 v3 unit tests feeding ragged block sizes over these kernels — golden K-weighting anchor, loudness goldens, sliding-window robustness, Fast-follower convergence, gain-computer behavior on both grids (mode switch, floor, ramp, clamp, freeze, silence hold). Wired from `CMakeLists.txt` (`makegain_tests`). |
 | `scripts/bootstrap.sh` | Fresh-machine toolchain/dependency setup — the **single dependency source** (package lists per distro; sanitizer runtimes explicit — see `doc/human/build.md` §7). |
 | `scripts/check-all.sh` | CI-stand-in: builds + tests all presets for the current platform. Output is quiet by default (one-line summary per step, logs in `build/<preset>/logs/`); `-v` streams live. |
-| `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 9): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). Delegates to `check-all.sh` inside the container. |
+| `scripts/docker-check.sh` | Tier-1 Linux verification lanes through containers only (AGENTS rule 9): default = arm64 native; `--x64` = Rosetta-emulated **amd64** (build.md §8.2). `-v` streams live output through to the container. Delegates to `check-all.sh` inside the container. |
 | `docker/fedora-dev.Dockerfile` | The pinned fedora:45 image both lanes build from — faithful stand-in for the Asahi Remix userland (kernel/mesa only differ). |
 | `cmake/deps-pins.cmake` | The pinned third-party versions (JUCE, clap-juce-extensions, Catch2). |
 

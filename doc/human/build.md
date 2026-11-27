@@ -194,8 +194,10 @@ one compares `gcc --version` inside the container vs. on the Asahi box.
 **Committed lane:**
 
 ```sh
-scripts/docker-check.sh         # arm64 native lane
+scripts/docker-check.sh         # arm64 native lane (quiet, one line per lane)
+scripts/docker-check.sh -v      # streams output live while still logging
 scripts/docker-check.sh --x64   # amd64 under Rosetta (§8.2)
+scripts/docker-check.sh -v --x64 # verbose amd64 lane
 ```
 
 `docker/fedora-dev.Dockerfile` provisions the image (same dnf package
