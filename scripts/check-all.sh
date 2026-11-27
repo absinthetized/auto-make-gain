@@ -5,8 +5,9 @@
 #   2. configure + build the sanitized test preset
 #   3. run ctest on both
 # Usage: ./scripts/check-all.sh              (auto-detects platform)
+#        ./scripts/check-all.sh -v           (same, streams live output)
 #        ./scripts/check-all.sh macos ...    (explicit presets, space-separated)
-#        ./scripts/check-all.sh -v macos ...  (streams live output)
+#        ./scripts/check-all.sh -v macos ...  (explicit presets, streaming)
 set -u
 
 platform="$(uname -s)-$(uname -m)"
@@ -18,18 +19,17 @@ case "$platform" in
      echo "  $0 <preset> [-sanitize-variant] [more...]" >&2; exit 2 ;;
 esac
 
-# Capture mode: -v before first preset means stream live.
+# Capture mode: -v before the first preset means stream live.
+# -v may stand alone: then the platform defaults still apply, so
+# `check-all.sh -v` and `docker-check.sh -v` both mean "quiet step
+# summary, but show me the output".
 stream=0
+if [[ "${1:-}" = "-v" ]]; then
+  stream=1
+  shift
+fi
+
 if [ $# -gt 0 ]; then
-  # Shift off a leading -v so PRESETS still works below.
-  if [[ "${1:-}" = "-v" ]]; then
-    stream=1
-    shift
-  fi
-  [ $# -eq 0 ] && {
-    echo "usage: $0 [-v] <preset> [more...]" >&2
-    exit 2
-  }
   PRESETS=("$@")
 else
   # shellcheck disable=SC2206
