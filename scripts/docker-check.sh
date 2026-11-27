@@ -21,6 +21,8 @@
 # provisioning run it costs ~1 second unless scripts/bootstrap.sh changed.
 # The --x64 image has its own tag and layer cache; its FIRST provisioning
 # compiles the whole toolchain workload under emulation (~30-90 min).
+# Image-build output is captured to build/docker-<arch>/logs/image.log
+# (one summary line; the failing tail on failure; -v streams as well).
 #
 # What it validates:
 #   0. version gate - scripts/check-version.sh, ON THE HOST before any
@@ -58,10 +60,12 @@ done
 PLATFORM=""
 IMAGE=makegain-fedora-dev:latest
 ARCH_LABEL="arm64 (native in Docker Desktop's Linux VM)"
+LANE_NAME="docker-arm64"
 case "$LANE" in
   "")     ;;
   --x64)  PLATFORM="linux/amd64"; IMAGE=makegain-fedora-dev:x64
-          ARCH_LABEL="amd64 (Rosetta-emulated)" ;;
+          ARCH_LABEL="amd64 (Rosetta-emulated)"
+          LANE_NAME="docker-x64" ;;
 esac
 
 cd "$ROOT"
@@ -81,8 +85,32 @@ if [[ -n "$PLATFORM" ]]; then
   RUN_FLAGS="--platform $PLATFORM"
 fi
 
+# [1/2] Image build, through the same capture contract as check-all.sh's
+# steps: one summary line, the failing tail + log path on failure, and -v
+# streams while still logging. A cold provisioning build takes 30-90 min;
+# the log is the only record of its progress.
+img_log="build/${LANE_NAME}/logs/image.log"
+mkdir -p "build/${LANE_NAME}/logs"
+: > "$img_log"
 echo "==> [1/2] building image (layer-cached; slow only on first provisioning)"
-docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile .
+img_rc=0
+if [[ "$stream" -eq 1 ]]; then
+  docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile . \
+    2>&1 | tee "$img_log" || img_rc=$?
+else
+  docker build $BUILD_FLAGS --tag "$IMAGE" -f docker/fedora-dev.Dockerfile . \
+    >>"$img_log" 2>&1 || img_rc=$?
+fi
+if [[ "$img_rc" -eq 0 ]]; then
+  echo "OK [${LANE_NAME}] image"
+else
+  echo "FAILED [${LANE_NAME}] image" >&2
+  echo "--- last 60 lines of ${img_log} ---"
+  tail -n 60 "$img_log"
+  echo "--- end ---"
+  echo "log at ${img_log}" >&2
+  exit "$img_rc"
+fi
 
 # Run check-all.sh inside the container. It auto-detects the correct presets
 # from uname, so we don't pass individual preset names — the lane label

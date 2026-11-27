@@ -202,8 +202,12 @@ scripts/docker-check.sh -v --x64 # verbose amd64 lane
 
 `docker/fedora-dev.Dockerfile` provisions the image (same dnf package
 list as `scripts/bootstrap.sh`). Sanitizer presets run through the same
-wrapper (`§3`). What the container can never answer: *does the plugin
-load and behave inside a real DAW* — that stays Tier 2, by design.
+wrapper (`§3`). Both the image build and the in-container steps follow
+the `§3` output contract: logs under `build/<lane>/logs/`
+(`docker-arm64` / `docker-x64` for the image build), one summary line
+each, the failing tail on failure. What the container can never answer:
+*does the plugin load and behave inside a real DAW* — that stays Tier 2,
+by design.
 
 ### 8.1 Artifact transfer lane (container → pen → bare metal)
 
